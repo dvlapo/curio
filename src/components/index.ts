@@ -1,0 +1,8 @@
+export { Categories } from './Categories'
+export { Footer } from './Footer'
+export { Header } from './Header'
+export { Hero } from './Hero'
+export { MobileCatalogShortcut } from './MobileCatalogShortcut'
+export { Newsletter } from './Newsletter'
+export { Products } from './Products'
+export { Story } from './Story'

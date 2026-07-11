@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Production builds
+dist/
+dist-ssr/
+
+# Local environment files (keep templates such as .env.example)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Package-manager and runtime logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Tooling caches and generated metadata
+.vite/
+.eslintcache
+*.tsbuildinfo
+coverage/
+.nyc_output/
+
+# Local editor settings
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+*~
