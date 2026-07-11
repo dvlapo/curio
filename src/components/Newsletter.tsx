@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { Field, Form, Formik, type FieldProps } from 'formik';
 import { ArrowRightIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { newsletterSchema, type NewsletterValues } from '../../validations';
+
+const initialValues: NewsletterValues = {
+  email: '',
+};
 
 export function Newsletter() {
-  const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (email) setSent(true);
-  };
 
   return (
     <section
@@ -31,23 +33,47 @@ export function Newsletter() {
           </div>
         </div>
       ) : (
-        <form onSubmit={submit}>
-          <label htmlFor="email">Email address</label>
-          <div>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-            />
-            <button className="pressable" aria-label="Join newsletter">
-              <ArrowRightIcon aria-hidden="true" />
-            </button>
-          </div>
-          <p>No clutter. Unsubscribe whenever you like.</p>
-        </form>
+        <Formik<NewsletterValues>
+          initialValues={initialValues}
+          validationSchema={newsletterSchema}
+          onSubmit={() => setSent(true)}
+        >
+          <Form noValidate>
+            <label htmlFor="newsletter-email">Email address</label>
+            <Field name="email">
+              {({ field, meta }: FieldProps<string>) => {
+                const error = meta.touched && meta.error ? meta.error : '';
+                return (
+                  <>
+                    <div>
+                      <Input
+                        id="newsletter-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={error ? 'newsletter-email-error' : undefined}
+                        {...field}
+                      />
+                      <Button type="submit" size="icon" aria-label="Join newsletter">
+                        <ArrowRightIcon aria-hidden="true" />
+                      </Button>
+                    </div>
+                    {error && (
+                      <p
+                        id="newsletter-email-error"
+                        className="m-0 text-sm font-semibold text-red-700"
+                        role="alert"
+                      >
+                        {error}
+                      </p>
+                    )}
+                  </>
+                );
+              }}
+            </Field>
+            <p>No clutter. Unsubscribe whenever you like.</p>
+          </Form>
+        </Formik>
       )}
     </section>
   );

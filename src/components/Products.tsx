@@ -4,9 +4,13 @@ import {
   MagnifyingGlassIcon,
   ShoppingBagIcon,
 } from '@heroicons/react/24/outline';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { useCart } from '../cart/CartContext';
 import type { CategoryView, ProductView } from '../types';
 import { formatNaira } from '../utils/money';
 import { ImageWithFallback } from './ImageWithFallback';
+import { Input } from './ui/input';
 
 interface ProductsProps {
   products: ProductView[];
@@ -41,6 +45,8 @@ export function Products({
   targetCategory,
   onTargetHandled,
 }: ProductsProps) {
+  const navigate = useNavigate();
+  const { addProduct } = useCart();
   const [active, setActive] = useState('all');
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
@@ -96,7 +102,7 @@ export function Products({
         <label className="search-field">
           <MagnifyingGlassIcon aria-hidden="true" />
           <span className="sr-only">Search products</span>
-          <input
+          <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search products"
@@ -164,9 +170,17 @@ export function Products({
                   <ImageWithFallback src={product.image} alt={product.name} />
                   <button
                     className="quick-add pressable"
-                    aria-label={`${product.name} purchasing coming soon`}
+                    aria-label={`Add ${product.name} to cart`}
+                    disabled={product.stock === 0}
+                    onClick={() => {
+                      addProduct(product);
+                      toast.success('Added to cart', {
+                        description: product.name,
+                        action: { label: 'View cart', onClick: () => navigate('/cart') },
+                      });
+                    }}
                   >
-                    <span>Coming soon</span>
+                    <span>{product.stock === 0 ? 'Unavailable' : 'Add to cart'}</span>
                     <ShoppingBagIcon aria-hidden="true" />
                   </button>
                   {product.stock === 0 && (

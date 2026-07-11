@@ -6,6 +6,8 @@ import {
   ShoppingBagIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import { useNavigate } from 'react-router-dom';
+import { useCart } from '../cart/CartContext';
 
 interface HeaderProps {
   onScroll: (id: string) => void;
@@ -14,6 +16,8 @@ interface HeaderProps {
 export function Header({ onScroll }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const reduceMotion = useReducedMotion();
+  const routerNavigate = useNavigate();
+  const { count } = useCart();
 
   const navigate = (id: string) => {
     setOpen(false);
@@ -38,11 +42,11 @@ export function Header({ onScroll }: HeaderProps) {
         <div className="nav-actions">
           <button
             className="bag-button pressable"
-            aria-label="Shopping bag, coming soon"
-            title="Coming soon"
+            aria-label={`Shopping bag, ${count} ${count === 1 ? 'item' : 'items'}`}
+            onClick={() => routerNavigate('/cart')}
           >
             <ShoppingBagIcon aria-hidden="true" />
-            <span>0</span>
+            <span>{count}</span>
           </button>
           <button
             className="menu-button pressable"

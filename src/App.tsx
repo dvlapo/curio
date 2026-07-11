@@ -1,182 +1,122 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import Lenis from 'lenis';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { useReducedMotion } from 'motion/react';
-import { getLandingData } from './api';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Toaster } from 'sonner';
+import { AuthProvider } from './auth/AuthContext';
+import { CartProvider } from './cart/CartContext';
+import { queryClient } from './queryClient';
+import { ProtectedRoute } from './routes/ProtectedRoute';
+import { DashboardShell, StoreShell } from './ui/AppShell';
+import { LandingPage } from './pages/LandingPage';
+import { LoginPage, RegisterPage } from './pages/AuthPages';
 import {
-  fallbackCategories,
-  fallbackProducts,
-  normalizeCategories,
-  normalizeProducts,
-} from './data';
+  CartPage,
+  CheckoutPage,
+  OrdersPage,
+  PaymentCallbackPage,
+  ProductDetailPage,
+  ProductListPage,
+  ProfilePage,
+} from './pages/StorePages';
 import {
-  Categories,
-  Footer,
-  Header,
-  Hero,
-  MobileCatalogShortcut,
-  Newsletter,
-  Products,
-  Story,
-} from './components';
-import type { CategoryView, ProductView } from './types';
+  VendorDashboardPage,
+  VendorInventoryPage,
+  VendorProductsPage,
+  VendorStorePage,
+} from './pages/vendor/VendorPages';
+import {
+  AdminAnalyticsPage,
+  AdminCategoriesPage,
+  AdminOrdersPage,
+  AdminUsersPage,
+  AdminVendorsPage,
+} from './pages/admin/AdminPages';
 
-gsap.registerPlugin(ScrollTrigger);
+const vendorLinks = [
+  { to: '/vendor', label: 'Overview' },
+  { to: '/vendor/store', label: 'Store' },
+  { to: '/vendor/products', label: 'Products' },
+  { to: '/vendor/inventory', label: 'Inventory' },
+];
+
+const adminLinks = [
+  { to: '/admin/users', label: 'Users' },
+  { to: '/admin/vendors', label: 'Vendors' },
+  { to: '/admin/categories', label: 'Categories' },
+  { to: '/admin/orders', label: 'Orders' },
+  { to: '/admin/analytics', label: 'Analytics' },
+];
 
 export default function App() {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [categories, setCategories] =
-    useState<CategoryView[]>(fallbackCategories);
-  const [products, setProducts] = useState<ProductView[]>(fallbackProducts);
-  const [loading, setLoading] = useState(true);
-  const [usedFallback, setUsedFallback] = useState(false);
-  const [targetCategory, setTargetCategory] = useState<string | null>(null);
-  const reduceMotion = useReducedMotion();
-
-  const load = useCallback((signal?: AbortSignal) => {
-    setLoading(true);
-    getLandingData(signal)
-      .then(([categoryData, productData]) => {
-        setCategories(normalizeCategories(categoryData));
-        setProducts(normalizeProducts(productData.data));
-        setUsedFallback(false);
-      })
-      .catch((error: unknown) => {
-        if (
-          signal?.aborted ||
-          (error instanceof DOMException && error.name === 'AbortError')
-        )
-          return;
-        setCategories(fallbackCategories);
-        setProducts(fallbackProducts);
-        setUsedFallback(true);
-      })
-      .finally(() => {
-        if (!signal?.aborted) setLoading(false);
-      });
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    load(controller.signal);
-    return () => controller.abort();
-  }, [load]);
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    const lenis = new Lenis({
-      duration: 1.05,
-      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-    });
-    const update = (time: number) => lenis.raf(time * 1000);
-    lenis.on('scroll', ScrollTrigger.update);
-    gsap.ticker.add(update);
-    gsap.ticker.lagSmoothing(0);
-    return () => {
-      gsap.ticker.remove(update);
-      lenis.destroy();
-    };
-  }, [reduceMotion]);
-
-  useEffect(() => {
-    if (reduceMotion || !rootRef.current) return;
-    const context = gsap.context(() => {
-      gsap.from('.hero-copy > *', {
-        opacity: 0,
-        y: 20,
-        duration: 0.75,
-        stagger: 0.08,
-        ease: 'power3.out',
-      });
-      gsap.from('.hero-media', {
-        opacity: 0,
-        clipPath: 'inset(0 0 100% 0)',
-        duration: 1,
-        ease: 'power3.out',
-        delay: 0.12,
-      });
-      gsap.utils
-        .toArray<HTMLElement>('.section-reveal')
-        .filter((element) => !element.closest('.hero'))
-        .forEach((element) => {
-          gsap.from(element, {
-            opacity: 0,
-            y: 28,
-            duration: 0.7,
-            ease: 'power3.out',
-            scrollTrigger: {
-              trigger: element,
-              start: 'top 88%',
-              once: true,
-            },
-          });
-        });
-      gsap.to('.hero-product', {
-        yPercent: 6,
-        ease: 'none',
-        scrollTrigger: {
-          trigger: '.hero',
-          start: 'top top',
-          end: 'bottom top',
-          scrub: 0.7,
-        },
-      });
-    }, rootRef);
-    return () => context.revert();
-  }, [reduceMotion, loading]);
-
-  const scrollTo = useCallback(
-    (id: string) => {
-      document.getElementById(id)?.scrollIntoView({
-        behavior: reduceMotion ? 'auto' : 'smooth',
-        block: 'start',
-      });
-    },
-    [reduceMotion],
-  );
-
-  const explore = useCallback(
-    (target?: string) => {
-      setTargetCategory(target ?? null);
-      scrollTo('products');
-    },
-    [scrollTo],
-  );
-
-  const chooseCategory = useCallback(
-    (category: CategoryView) => {
-      setTargetCategory(category.id);
-      scrollTo('products');
-    },
-    [scrollTo],
-  );
-
-  const clearTargetCategory = useCallback(() => setTargetCategory(null), []);
-
   return (
-    <div ref={rootRef}>
-      <Header onScroll={scrollTo} />
-      <main className="mb-40">
-        <Hero onExplore={explore} />
-        <Categories
-          categories={categories.length ? categories : fallbackCategories}
-          onChoose={chooseCategory}
-        />
-        <Products
-          products={products}
-          categories={categories}
-          loading={loading}
-          usedFallback={usedFallback}
-          onRetry={() => load()}
-          targetCategory={targetCategory}
-          onTargetHandled={clearTargetCategory}
-        />
-        <Story />
-        <Newsletter />
-      </main>
-      <Footer />
-      <MobileCatalogShortcut onClick={() => explore()} />
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <CartProvider>
+          <BrowserRouter>
+            <Toaster
+              className="curio-toaster"
+              position="bottom-right"
+              closeButton
+              visibleToasts={3}
+              toastOptions={{ duration: 3200 }}
+            />
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+
+              <Route element={<StoreShell />}>
+                <Route path="/products" element={<ProductListPage />} />
+                <Route path="/products/:id" element={<ProductDetailPage />} />
+                <Route path="/cart" element={<CartPage />} />
+                <Route
+                  path="/payment/callback"
+                  element={<PaymentCallbackPage />}
+                />
+                <Route element={<ProtectedRoute />}>
+                  <Route path="/profile" element={<ProfilePage />} />
+                </Route>
+                <Route element={<ProtectedRoute roles={['CUSTOMER']} />}>
+                  <Route path="/checkout" element={<CheckoutPage />} />
+                  <Route path="/orders" element={<OrdersPage />} />
+                </Route>
+              </Route>
+
+              <Route element={<ProtectedRoute roles={['VENDOR']} />}>
+                <Route
+                  path="/vendor"
+                  element={
+                    <DashboardShell title="Vendor" links={vendorLinks} />
+                  }
+                >
+                  <Route index element={<VendorDashboardPage />} />
+                  <Route path="store" element={<VendorStorePage />} />
+                  <Route path="products" element={<VendorProductsPage />} />
+                  <Route path="inventory" element={<VendorInventoryPage />} />
+                </Route>
+              </Route>
+
+              <Route element={<ProtectedRoute roles={['ADMIN']} />}>
+                <Route
+                  path="/admin"
+                  element={<DashboardShell title="Admin" links={adminLinks} />}
+                >
+                  <Route
+                    index
+                    element={<Navigate to="/admin/users" replace />}
+                  />
+                  <Route path="users" element={<AdminUsersPage />} />
+                  <Route path="vendors" element={<AdminVendorsPage />} />
+                  <Route path="categories" element={<AdminCategoriesPage />} />
+                  <Route path="orders" element={<AdminOrdersPage />} />
+                  <Route path="analytics" element={<AdminAnalyticsPage />} />
+                </Route>
+              </Route>
+
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </CartProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

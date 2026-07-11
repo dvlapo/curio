@@ -436,6 +436,309 @@
     .image-fallback svg {
         @apply w-8 text-[#74766e];
     }
+
+    .app-frame {
+        @apply min-h-[100dvh] bg-paper text-ink;
+    }
+    .app-header {
+        @apply sticky top-0 z-50 mx-auto grid h-[74px] w-[min(1420px,calc(100%-48px))] grid-cols-[1fr_auto_1fr] items-center bg-paper/82 backdrop-blur-xl max-[900px]:h-auto max-[900px]:grid-cols-1 max-[900px]:gap-4 max-[900px]:py-4;
+    }
+    .app-wordmark {
+        @apply justify-self-start text-[24px] leading-none font-extrabold no-underline;
+    }
+    .app-wordmark span {
+        @apply text-[#6c9918];
+    }
+    .app-nav {
+        @apply flex flex-wrap justify-center gap-6 text-sm font-semibold max-[900px]:justify-start;
+    }
+    .app-nav a,
+    .dashboard-sidebar nav a {
+        @apply rounded-full px-3 py-2 no-underline text-muted transition-[background-color,color,transform] duration-150 ease-out-expo active:scale-[.97];
+    }
+    .app-nav a.active,
+    .dashboard-sidebar nav a.active {
+        @apply bg-ink text-paper;
+    }
+    .app-actions {
+        @apply flex items-center justify-end gap-3 max-[900px]:justify-start;
+    }
+    .icon-text,
+    .text-button {
+        @apply inline-flex min-h-11 items-center gap-2 rounded-full border border-ink/15 bg-transparent px-4 text-sm font-semibold no-underline transition-[border-color,background-color,transform] duration-150 ease-out-expo active:scale-[.97];
+    }
+    .icon-text svg {
+        @apply size-5;
+    }
+    .cart-link {
+        @apply inline-flex min-h-11 items-center gap-2 rounded-full bg-acid px-4 text-sm font-bold text-[#111311] no-underline transition-transform duration-150 ease-out-expo active:scale-[.97];
+    }
+    .cart-link svg {
+        @apply size-5;
+    }
+
+    .page-shell {
+        @apply mx-auto w-[min(1320px,calc(100%-64px))] py-[88px] max-[700px]:w-[calc(100%-28px)] max-[700px]:py-14;
+    }
+    .page-intro,
+    .dashboard-intro {
+        @apply mb-10 max-w-[760px];
+    }
+    .page-intro h1,
+    .dashboard-intro h1,
+    .auth-card h1,
+    .empty-panel h1 {
+        @apply m-0 font-serif text-[clamp(42px,5vw,74px)] leading-[1.02] font-medium;
+    }
+    .page-intro p,
+    .dashboard-intro p,
+    .auth-card > p,
+    .empty-panel p {
+        @apply mt-5 mb-0 max-w-[650px] text-base leading-[1.65] text-muted;
+    }
+    .route-state,
+    .empty-panel,
+    .notice-panel {
+        @apply rounded-[8px] border border-ink/15 bg-surface p-8;
+    }
+    .route-state {
+        @apply text-base font-semibold text-muted;
+    }
+    .empty-panel h2,
+    .notice-panel h2 {
+        @apply mt-0 mb-3 font-serif text-[32px] font-medium;
+    }
+    .kicker {
+        @apply mb-4 mt-0 text-xs font-bold uppercase text-muted;
+    }
+    .form-error {
+        @apply rounded-[8px] border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-700;
+    }
+
+    .auth-page {
+        @apply grid min-h-[100dvh] place-items-center px-4 py-12;
+    }
+    .auth-card,
+    .settings-form,
+    .checkout-form,
+    .filter-panel {
+        @apply grid gap-4 rounded-[8px] border border-ink/15 bg-paper p-6;
+    }
+    .auth-card {
+        @apply w-[min(520px,100%)];
+    }
+    .auth-card label,
+    .settings-form label,
+    .checkout-form label,
+    .filter-panel label,
+    .inline-form label {
+        @apply grid gap-2 text-sm font-semibold capitalize;
+    }
+    .auth-card input,
+    .settings-form input,
+    .settings-form textarea,
+    .settings-form select,
+    .checkout-form input,
+    .checkout-form select,
+    .filter-panel input,
+    .filter-panel select,
+    .inline-form input,
+    .table-list select {
+        @apply min-h-12 rounded-[8px] border border-ink/15 bg-surface px-4 text-base text-ink outline-0 focus:border-ink;
+    }
+    .settings-form textarea {
+        @apply min-h-28 py-3;
+    }
+    .two-col {
+        @apply grid grid-cols-2 gap-4 max-[700px]:grid-cols-1;
+    }
+    .segmented {
+        @apply grid grid-cols-2 rounded-[8px] border border-ink/15 p-1;
+    }
+    .segmented button {
+        @apply min-h-11 rounded-[6px] bg-transparent text-sm font-semibold transition-[background-color,color,transform] duration-150 active:scale-[.98];
+    }
+    .segmented button.active {
+        @apply bg-ink text-paper;
+    }
+
+    .filter-panel {
+        @apply mb-10 grid-cols-[1.4fr_1fr_.7fr_.7fr_auto] items-end max-[1100px]:grid-cols-2 max-[700px]:grid-cols-1;
+    }
+    .commerce-grid {
+        @apply grid grid-cols-4 gap-4 max-[1180px]:grid-cols-3 max-[900px]:grid-cols-2 max-[640px]:grid-cols-1;
+    }
+    .commerce-card {
+        @apply min-w-0;
+    }
+    .commerce-image {
+        @apply block aspect-[1/1.08] overflow-hidden rounded-[8px] bg-surface;
+    }
+    .commerce-image img,
+    .commerce-image .image-fallback {
+        @apply h-full w-full object-cover [filter:saturate(.55)] transition-transform duration-300 ease-out-expo;
+    }
+    .commerce-card h2 {
+        @apply mt-2 mb-2 font-serif text-[24px] leading-tight font-medium;
+    }
+    .commerce-card h2 a {
+        @apply no-underline;
+    }
+    .commerce-card p {
+        @apply m-0 text-sm leading-[1.55] text-muted;
+    }
+    .commerce-meta,
+    .commerce-bottom {
+        @apply mt-4 flex items-center justify-between gap-3;
+    }
+    .commerce-meta {
+        @apply text-xs font-semibold uppercase text-muted;
+    }
+    .commerce-bottom strong,
+    .detail-price {
+        @apply text-lg font-bold;
+    }
+    .mini-button {
+        @apply inline-flex min-h-10 items-center justify-center rounded-full border border-ink/15 bg-transparent px-4 text-sm font-semibold transition-[border-color,background-color,color,transform] duration-150 ease-out-expo active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50;
+    }
+    .mini-button:hover {
+        @apply border-ink/45;
+    }
+    .pagination {
+        @apply mt-12 flex items-center justify-center gap-4 text-sm font-semibold;
+    }
+    .pagination button {
+        @apply rounded-full border border-ink/15 bg-transparent px-4 py-2 disabled:opacity-40;
+    }
+
+    .detail-layout {
+        @apply grid grid-cols-[1fr_.82fr] gap-14 max-[900px]:grid-cols-1;
+    }
+    .detail-media {
+        @apply aspect-[1/1.05] overflow-hidden rounded-[8px] bg-surface;
+    }
+    .detail-media img,
+    .detail-media .image-fallback {
+        @apply h-full w-full object-cover;
+    }
+    .detail-copy h1 {
+        @apply my-6 font-serif text-[clamp(44px,5vw,78px)] leading-[1.02] font-medium;
+    }
+    .detail-copy > p,
+    .availability,
+    .review-boundary p {
+        @apply text-base leading-[1.65] text-muted;
+    }
+    .review-boundary {
+        @apply mt-10 border-t border-ink/15 pt-8;
+    }
+    .review-boundary h2 {
+        @apply mt-0 font-serif text-[30px] font-medium;
+    }
+
+    .cart-layout {
+        @apply grid grid-cols-[1fr_360px] gap-8 max-[900px]:grid-cols-1;
+    }
+    .cart-list {
+        @apply grid gap-3;
+    }
+    .cart-row {
+        @apply grid grid-cols-[96px_1fr_90px_auto] items-center gap-4 rounded-[8px] border border-ink/15 bg-paper p-3 max-[700px]:grid-cols-[80px_1fr] max-[700px]:items-start;
+    }
+    .cart-row img,
+    .cart-row .image-fallback {
+        @apply aspect-square h-24 w-24 rounded-[8px] object-cover max-[700px]:h-20 max-[700px]:w-20;
+    }
+    .cart-row h2 {
+        @apply m-0 font-serif text-[22px] font-medium;
+    }
+    .cart-row p {
+        @apply m-0 text-sm font-semibold text-muted;
+    }
+    .cart-row input {
+        @apply min-h-11 rounded-[8px] border border-ink/15 bg-surface px-3 text-base;
+    }
+    .summary-panel {
+        @apply sticky top-24 h-fit rounded-[8px] border border-ink/15 bg-surface p-6;
+    }
+    .summary-panel strong {
+        @apply block font-serif text-[38px] font-medium;
+    }
+    .summary-panel p {
+        @apply text-sm leading-[1.55] text-muted;
+    }
+    .inline-warning {
+        @apply mt-2 inline-block rounded-full bg-red-500/10 px-3 py-1 text-xs font-bold text-red-700;
+    }
+
+    .checkout-page {
+        @apply max-w-[860px];
+    }
+
+    .dashboard-shell {
+        @apply grid min-h-[100dvh] grid-cols-[280px_1fr] bg-paper text-ink max-[900px]:grid-cols-1;
+    }
+    .dashboard-sidebar {
+        @apply sticky top-0 h-[100dvh] border-r border-ink/15 bg-surface p-6 max-[900px]:static max-[900px]:h-auto max-[900px]:border-r-0 max-[900px]:border-b;
+    }
+    .dashboard-sidebar p {
+        @apply mt-8 mb-5 text-xs font-bold uppercase text-muted;
+    }
+    .dashboard-sidebar nav {
+        @apply grid gap-2;
+    }
+    .dashboard-main {
+        @apply min-w-0 p-[clamp(24px,5vw,72px)];
+    }
+    .metric-grid {
+        @apply grid grid-cols-4 gap-4 max-[1100px]:grid-cols-2 max-[640px]:grid-cols-1;
+    }
+    .metric-grid article {
+        @apply rounded-[8px] border border-ink/15 bg-surface p-5;
+    }
+    .metric-grid span {
+        @apply text-xs font-bold uppercase text-muted;
+    }
+    .metric-grid strong {
+        @apply mt-3 block font-serif text-[30px] font-medium;
+    }
+    .notice-panel {
+        @apply mt-8;
+    }
+    .table-list {
+        @apply mt-8 grid gap-3;
+    }
+    .table-list article {
+        @apply grid grid-cols-[1.5fr_.7fr_.9fr_auto] items-center gap-4 rounded-[8px] border border-ink/15 bg-paper p-4 max-[900px]:grid-cols-1;
+    }
+    .table-list article.category-row {
+        @apply grid-cols-[1fr_auto_auto] max-[900px]:grid-cols-1;
+    }
+    .table-list strong {
+        @apply block text-base;
+    }
+    .table-list span {
+        @apply block text-sm text-muted;
+    }
+    .category-edit-form {
+        @apply grid grid-cols-4 items-end gap-3 max-[1180px]:grid-cols-2 max-[900px]:grid-cols-1;
+    }
+    .category-edit-form label {
+        @apply grid gap-1 text-xs font-bold uppercase text-muted;
+    }
+    .category-edit-form input {
+        @apply min-h-11 rounded-[8px] border border-ink/15 bg-surface px-3 text-base text-ink outline-0 focus:border-ink;
+    }
+    .inline-form {
+        @apply grid grid-cols-[90px_90px_auto] items-end gap-3 max-[700px]:grid-cols-1;
+    }
+
+    .curio-toaster [data-sonner-toast] {
+        @apply border border-ink/15 bg-paper text-ink shadow-[0_18px_60px_rgba(17,19,17,.16)];
+    }
+    .curio-toaster [data-button] {
+        @apply bg-ink text-paper;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
