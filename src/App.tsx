@@ -55,9 +55,15 @@ export default function App() {
             <Toaster
               className="curio-toaster"
               position="bottom-right"
-              closeButton
+              richColors
               visibleToasts={3}
-              toastOptions={{ duration: 3200 }}
+              toastOptions={{
+                duration: 3200,
+                style: {
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: '0.875rem',
+                },
+              }}
             />
             <Routes>
               <Route path="/" element={<LandingPage />} />
