@@ -860,11 +860,7 @@ export function ProfilePage() {
               placeholder="Leave blank to keep current password"
               autoComplete="new-password"
             />
-            <Button
-              type="submit"
-              size="lg"
-              isLoading={isSubmitting}
-            >
+            <Button type="submit" size="lg" isLoading={isSubmitting}>
               Save profile
             </Button>
             <Button

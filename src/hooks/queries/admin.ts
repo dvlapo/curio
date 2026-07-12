@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { adminApi, catalogApi, ordersApi, usersApi, vendorApi } from '../../api';
+import {
+  adminApi,
+  catalogApi,
+  ordersApi,
+  usersApi,
+  vendorApi,
+} from '../../api';
 import type { OrderStatus, UpdateCategoryInput } from '../../types';
 import { queryKeys } from './keys';
 
