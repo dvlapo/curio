@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { useField } from 'formik';
 import { cn } from '../../lib/utils';
 import { Input } from '../ui/input';
@@ -11,16 +12,27 @@ type FieldShellProps = {
   label: string;
   description?: string;
   className?: string;
-  children: (props: { id: string; describedBy?: string; invalid: boolean }) => ReactNode;
+  children: (props: {
+    id: string;
+    describedBy?: string;
+    invalid: boolean;
+  }) => ReactNode;
 };
 
-function FieldShell({ name, label, description, className, children }: FieldShellProps) {
+function FieldShell({
+  name,
+  label,
+  description,
+  className,
+  children,
+}: FieldShellProps) {
   const id = useId();
   const [, meta] = useField(name);
   const error = meta.touched && meta.error ? meta.error : '';
   const descriptionId = description ? `${id}-description` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [descriptionId, errorId].filter(Boolean).join(' ') || undefined;
+  const describedBy =
+    [descriptionId, errorId].filter(Boolean).join(' ') || undefined;
 
   return (
     <div className={cn('grid gap-2', className)}>
@@ -32,7 +44,11 @@ function FieldShell({ name, label, description, className, children }: FieldShel
         </p>
       )}
       {error && (
-        <p id={errorId} className="m-0 text-sm font-semibold text-red-700" role="alert">
+        <p
+          id={errorId}
+          className="m-0 text-sm font-semibold text-red-700"
+          role="alert"
+        >
           {error}
         </p>
       )}
@@ -52,6 +68,7 @@ export function TextField({
   label,
   description,
   wrapperClassName,
+  className,
   ...props
 }: TextFieldProps) {
   const [field] = useField(name);
@@ -68,6 +85,10 @@ export function TextField({
           id={id}
           aria-describedby={describedBy}
           aria-invalid={invalid}
+          className={cn(
+            invalid && 'field-invalid-shake border-red-500/55',
+            className,
+          )}
           {...field}
           {...props}
         />
@@ -76,7 +97,72 @@ export function TextField({
   );
 }
 
-type TextareaFieldProps = Omit<React.ComponentProps<typeof Textarea>, 'name'> & {
+type PasswordFieldProps = Omit<
+  React.ComponentProps<typeof Input>,
+  'name' | 'type'
+> & {
+  name: string;
+  label: string;
+  description?: string;
+  wrapperClassName?: string;
+};
+
+export function PasswordField({
+  name,
+  label,
+  description,
+  wrapperClassName,
+  className,
+  disabled,
+  ...props
+}: PasswordFieldProps) {
+  const [field] = useField(name);
+  const [showPassword, setShowPassword] = useState(false);
+  const Icon = showPassword ? EyeSlashIcon : EyeIcon;
+
+  return (
+    <FieldShell
+      name={name}
+      label={label}
+      description={description}
+      className={wrapperClassName}
+    >
+      {({ id, describedBy, invalid }) => (
+        <div className="relative">
+          <Input
+            id={id}
+            aria-describedby={describedBy}
+            aria-invalid={invalid}
+            className={cn(
+              'pr-12',
+              invalid && 'field-invalid-shake border-red-500/55',
+              className,
+            )}
+            disabled={disabled}
+            type={showPassword ? 'text' : 'password'}
+            {...field}
+            {...props}
+          />
+          <button
+            type="button"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-pressed={showPassword}
+            className="absolute right-3 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-transparent text-muted transition-colors duration-150 hover:text-ink disabled:pointer-events-none disabled:opacity-50"
+            disabled={disabled}
+            onClick={() => setShowPassword((current) => !current)}
+          >
+            <Icon className="size-5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+    </FieldShell>
+  );
+}
+
+type TextareaFieldProps = Omit<
+  React.ComponentProps<typeof Textarea>,
+  'name'
+> & {
   name: string;
   label: string;
   description?: string;
@@ -88,6 +174,7 @@ export function TextareaField({
   label,
   description,
   wrapperClassName,
+  className,
   ...props
 }: TextareaFieldProps) {
   const [field] = useField(name);
@@ -104,6 +191,10 @@ export function TextareaField({
           id={id}
           aria-describedby={describedBy}
           aria-invalid={invalid}
+          className={cn(
+            invalid && 'field-invalid-shake border-red-500/55',
+            className,
+          )}
           {...field}
           {...props}
         />
@@ -125,6 +216,7 @@ export function SelectField({
   description,
   wrapperClassName,
   children,
+  className,
   ...props
 }: SelectFieldProps) {
   const [field] = useField(name);
@@ -141,6 +233,10 @@ export function SelectField({
           id={id}
           aria-describedby={describedBy}
           aria-invalid={invalid}
+          className={cn(
+            invalid && 'field-invalid-shake border-red-500/55',
+            className,
+          )}
           {...field}
           {...props}
         >

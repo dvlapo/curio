@@ -165,7 +165,7 @@ function CategoryForm({
             type="submit"
             variant={mode === 'create' ? 'default' : 'outline'}
             size={mode === 'create' ? 'lg' : 'sm'}
-            disabled={isSubmitting || isSaving}
+            isLoading={isSubmitting || isSaving}
           >
             {mode === 'create' ? 'Create category' : 'Save'}
           </Button>

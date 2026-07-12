@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { catalogApi, ordersApi, paymentsApi } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useCart } from '../cart/CartContext';
-import { FormError, SelectField, TextField } from '../components/forms/FormFields';
+import { FormError, PasswordField, SelectField, TextField } from '../components/forms/FormFields';
 import { ImageWithFallback } from '../components/ImageWithFallback';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -412,7 +412,7 @@ export function CheckoutPage() {
             <Button
               type="submit"
               size="lg"
-              disabled={isSubmitting || orderMutation.isPending || paymentMutation.isPending}
+              isLoading={isSubmitting || orderMutation.isPending || paymentMutation.isPending}
             >
               Continue to payment
             </Button>
@@ -572,14 +572,13 @@ export function ProfilePage() {
               <TextField name="firstName" label="First name" autoComplete="given-name" />
               <TextField name="lastName" label="Last name" autoComplete="family-name" />
             </div>
-            <TextField
+            <PasswordField
               name="password"
               label="New password"
-              type="password"
               placeholder="Leave blank to keep current password"
               autoComplete="new-password"
             />
-            <Button type="submit" size="lg" disabled={isSubmitting || mutation.isPending}>
+            <Button type="submit" size="lg" isLoading={isSubmitting || mutation.isPending}>
               Save profile
             </Button>
             <Button

@@ -127,7 +127,7 @@ export function VendorStorePage() {
             <TextField name="storeName" label="Store name" />
             <TextareaField name="description" label="Description" />
             <TextField name="logo" label="Logo URL" inputMode="url" />
-            <Button type="submit" size="lg" disabled={isSubmitting || mutation.isPending}>
+            <Button type="submit" size="lg" isLoading={isSubmitting || mutation.isPending}>
               Save store
             </Button>
           </Form>
@@ -227,6 +227,7 @@ export function VendorProductsPage() {
               type="submit"
               size="lg"
               disabled={!store.data?.isApproved || isSubmitting || createMutation.isPending}
+              isLoading={isSubmitting || createMutation.isPending}
             >
               Create product
             </Button>
@@ -293,7 +294,12 @@ function InventoryRowForm({
         <Form className="inline-form" noValidate>
           <TextField name="quantity" label="Qty" type="number" min="0" />
           <TextField name="lowStockAt" label="Low at" type="number" min="1" />
-          <Button variant="outline" size="sm" type="submit" disabled={isSubmitting || isSaving}>
+          <Button
+            variant="outline"
+            size="sm"
+            type="submit"
+            isLoading={isSubmitting || isSaving}
+          >
             Save
           </Button>
           <FormError>{formStatus}</FormError>

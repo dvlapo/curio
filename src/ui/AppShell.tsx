@@ -41,7 +41,7 @@ export function StoreShell() {
             </NavLink>
           )}
           {user?.role === 'VENDOR' && (
-            <NavLink to="/vendor" className={activeClass}>
+            <NavLink to="/vendor" end className={activeClass}>
               Vendor
             </NavLink>
           )}
@@ -92,7 +92,7 @@ export function DashboardShell({ title, links }: DashboardShellProps) {
         <p>{title}</p>
         <nav aria-label={`${title} navigation`}>
           {links.map((link) => (
-            <NavLink key={link.to} to={link.to} className={activeClass}>
+            <NavLink key={link.to} to={link.to} end className={activeClass}>
               {link.label}
             </NavLink>
           ))}
