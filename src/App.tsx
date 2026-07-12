@@ -21,6 +21,7 @@ import {
   VendorDashboardPage,
   VendorInventoryPage,
   VendorProductsPage,
+  VendorReviewsPage,
   VendorStorePage,
 } from './pages/vendor/VendorPages';
 import {
@@ -36,6 +37,7 @@ const vendorLinks = [
   { to: '/vendor/store', label: 'Store' },
   { to: '/vendor/products', label: 'Products' },
   { to: '/vendor/inventory', label: 'Inventory' },
+  { to: '/vendor/reviews', label: 'Reviews' },
 ];
 
 const adminLinks = [
@@ -98,6 +100,7 @@ export default function App() {
                   <Route path="store" element={<VendorStorePage />} />
                   <Route path="products" element={<VendorProductsPage />} />
                   <Route path="inventory" element={<VendorInventoryPage />} />
+                  <Route path="reviews" element={<VendorReviewsPage />} />
                 </Route>
               </Route>
 

@@ -1,5 +1,6 @@
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import {
+  ArrowLeftIcon,
   ArrowRightOnRectangleIcon,
   ShoppingBagIcon,
 } from '@heroicons/react/24/outline';
@@ -15,8 +16,8 @@ export function StoreShell() {
   const { count } = useCart();
   const navigate = useNavigate();
 
-  const signOut = () => {
-    logout();
+  const signOut = async () => {
+    await logout();
     navigate('/');
   };
 
@@ -97,6 +98,10 @@ export function DashboardShell({ title, links }: DashboardShellProps) {
             </NavLink>
           ))}
         </nav>
+        <Link to="/products" className="dashboard-back-link">
+          <ArrowLeftIcon aria-hidden="true" />
+          <span>Back to products</span>
+        </Link>
       </aside>
       <main className="dashboard-main">
         <Outlet />

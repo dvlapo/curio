@@ -10,7 +10,7 @@ export type OrderStatus =
 
 export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
 export type PaymentMethod = 'CARD' | 'BANK_TRANSFER' | 'WALLET';
-export type Money = string | number;
+export type Money = string;
 
 export interface ApiErrorBody {
   statusCode: number;
@@ -20,6 +20,7 @@ export interface ApiErrorBody {
 
 export interface AuthResponse {
   access_token: string;
+  refresh_token: string;
 }
 
 export interface AuthUser {
@@ -76,19 +77,20 @@ export interface ReviewReadModel {
   createdAt: string;
   updatedAt: string;
   user?: Pick<AuthUser, 'id' | 'firstName' | 'lastName'>;
+  product?: Pick<Product, 'id' | 'name' | 'images'>;
 }
 
 export interface Product {
   id: string;
-  vendorId?: string;
+  vendorId: string;
   categoryId: string;
   name: string;
   description: string | null;
   price: Money;
   images: string[];
-  isActive?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
   vendor?: Pick<Vendor, 'id' | 'storeName' | 'logo'>;
   category?: Category;
   inventory?: Inventory | { quantity: number } | null;
@@ -206,6 +208,56 @@ export interface VerifyPaymentResponse {
   amount: number;
   reference: string;
   paidAt: string | null;
+}
+
+export interface CreateReviewInput {
+  productId: string;
+  rating: number;
+  comment?: string;
+}
+
+export interface ReviewEligibility {
+  eligible: boolean;
+  hasReviewed: boolean;
+  hasDeliveredOrder: boolean;
+  reason: string | null;
+}
+
+export interface AdminAnalytics {
+  totalRevenue: Money;
+  ordersByStatus: Record<OrderStatus, number>;
+  topSellingProducts: Array<{
+    productId: string;
+    name: string;
+    images: string[];
+    vendor: Pick<Vendor, 'id' | 'storeName'>;
+    unitsSold: number;
+    revenue: Money;
+    orderCount: number;
+  }>;
+  vendorPerformance: Array<{
+    vendorId: string;
+    storeName: string;
+    productCount: number;
+    unitsSold: number;
+    revenue: Money;
+    orderCount: number;
+    reviewCount: number;
+    averageRating: number | null;
+  }>;
+}
+
+export interface UploadedProductImage {
+  url: string;
+  publicId: string;
+  width: number;
+  height: number;
+  format: string;
+  bytes: number;
+}
+
+export interface ProductImageUploadResponse {
+  images: UploadedProductImage[];
 }
 
 export interface CategoryView {

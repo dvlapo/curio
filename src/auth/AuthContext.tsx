@@ -30,7 +30,7 @@ interface AuthContextValue {
     lastName?: string;
     password?: string;
   }) => Promise<AuthUser>;
-  logout: () => void;
+  logout: () => Promise<void>;
   canAccess: (roles?: Role[]) => boolean;
 }
 
@@ -38,25 +38,26 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient();
-  const [hasToken, setHasToken] = useState(() => Boolean(tokenStore.get()));
+  const [hasSession, setHasSession] = useState(() => tokenStore.hasSession());
 
   const meQuery = useQuery({
     queryKey: ['auth', 'me'],
     queryFn: authApi.me,
-    enabled: hasToken,
+    enabled: hasSession,
     retry: false,
   });
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await authApi.logout().catch(() => undefined);
     tokenStore.clear();
-    setHasToken(false);
+    setHasSession(false);
     queryClient.clear();
   }, [queryClient]);
 
   useEffect(() => {
     const onUnauthorized = () => {
-      if (tokenStore.get()) return;
-      setHasToken(false);
+      if (tokenStore.hasSession()) return;
+      setHasSession(false);
       queryClient.clear();
       toast.warning('Your session expired. Please sign in again.');
     };
@@ -68,8 +69,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const login = useCallback(
     async (email: string, password: string) => {
       const result = await authApi.login({ email, password });
-      tokenStore.set(result.access_token);
-      setHasToken(true);
+      tokenStore.set(result);
+      setHasSession(true);
       return queryClient.fetchQuery({
         queryKey: ['auth', 'me'],
         queryFn: authApi.me,
@@ -87,8 +88,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       role: Exclude<Role, 'ADMIN'>;
     }) => {
       const result = await authApi.register(input);
-      tokenStore.set(result.access_token);
-      setHasToken(true);
+      tokenStore.set(result);
+      setHasSession(true);
       return queryClient.fetchQuery({
         queryKey: ['auth', 'me'],
         queryFn: authApi.me,
@@ -112,7 +113,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const user = meQuery.data ?? null;
   const status: AuthStatus =
-    hasToken && meQuery.isLoading
+    hasSession && meQuery.isLoading
       ? 'loading'
       : user
         ? 'authenticated'

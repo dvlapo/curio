@@ -1,8 +1,9 @@
 # Frontend Integration Guide
 
 This guide describes how a React and TypeScript frontend can integrate with the
-ecommerce API as it exists today. The final section separately identifies
-planned backend work that is **not yet available to the frontend**.
+ecommerce API as it exists today. Reviews and admin analytics are now
+frontend-callable API features. Email notifications are implemented as backend
+side effects and do not require frontend API calls.
 
 ## 1. API conventions
 
@@ -17,7 +18,7 @@ VITE_API_URL=http://localhost:3333/api/v1
 
 ```ts
 export const API_URL =
-  import.meta.env.VITE_API_URL ?? "http://localhost:3333/api/v1";
+  import.meta.env.VITE_API_URL ?? 'http://localhost:3333/api/v1';
 ```
 
 Change the environment variable for staging and production. Do not hard-code a
@@ -47,23 +48,34 @@ Registration and login return:
 ```ts
 interface AuthResponse {
   access_token: string;
+  refresh_token: string;
 }
 ```
 
-The token expires after 15 minutes. There is currently no refresh-token or
-server-side logout endpoint. On `401 Unauthorized`, clear the local session and
-send the user to login. A frontend logout is simply local token removal.
+Access tokens expire after 15 minutes. Refresh tokens expire after 7 days and
+are rotated on every successful refresh. On `401 Unauthorized`, attempt one
+refresh with `POST /auth/refresh`; if refresh fails, clear the local session and
+send the user to login. Server-side logout is available at `POST /auth/logout`
+and revokes the stored refresh token for the current user.
 
 For a simple browser client, `sessionStorage` limits persistence to the current
 tab:
 
 ```ts
-const TOKEN_KEY = "ecommerce_access_token";
+const ACCESS_TOKEN_KEY = 'ecommerce_access_token';
+const REFRESH_TOKEN_KEY = 'ecommerce_refresh_token';
 
 export const tokenStore = {
-  get: () => sessionStorage.getItem(TOKEN_KEY),
-  set: (token: string) => sessionStorage.setItem(TOKEN_KEY, token),
-  clear: () => sessionStorage.removeItem(TOKEN_KEY),
+  getAccess: () => sessionStorage.getItem(ACCESS_TOKEN_KEY),
+  getRefresh: () => sessionStorage.getItem(REFRESH_TOKEN_KEY),
+  set: (tokens: AuthResponse) => {
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
+    sessionStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+  },
+  clear: () => {
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+  },
 };
 ```
 
@@ -89,13 +101,13 @@ insufficient stock, generally use a single string.
 
 Common statuses:
 
-| Status | Meaning | Frontend response |
-| --- | --- | --- |
-| `400` | Invalid input, stock failure, payment failure, or invalid order transition | Show the returned message near the action |
-| `401` | Missing, invalid, expired, or disabled-user token | Clear the session and require login |
-| `403` | Correctly authenticated but wrong role or resource owner | Show an access-denied state |
-| `404` | Entity or payment not found | Show a not-found state |
-| `409` | Duplicate email, category slug, or vendor profile | Show the returned conflict message |
+| Status | Meaning                                                                         | Frontend response                                                                               |
+| ------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `400`  | Invalid input, stock failure, payment failure, or invalid order transition      | Show the returned message near the action                                                       |
+| `401`  | Missing, invalid, expired, disabled-user access token, or invalid refresh token | Refresh once for authenticated API calls; if refresh fails, clear the session and require login |
+| `403`  | Correctly authenticated but wrong role or resource owner                        | Show an access-denied state                                                                     |
+| `404`  | Entity or payment not found                                                     | Show a not-found state                                                                          |
+| `409`  | Duplicate email, category slug, vendor profile, or product review               | Show the returned conflict message                                                              |
 
 ## 2. A small React API layer
 
@@ -107,43 +119,80 @@ export class ApiError extends Error {
     public status: number,
     public body: ApiErrorBody,
   ) {
-    super(
-      Array.isArray(body.message) ? body.message.join(", ") : body.message,
-    );
+    super(Array.isArray(body.message) ? body.message.join(', ') : body.message);
   }
 }
 
-type ApiOptions = Omit<RequestInit, "body"> & {
+async function refreshSession() {
+  const refreshToken = tokenStore.getRefresh();
+  if (!refreshToken) return false;
+
+  const response = await fetch(`${API_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+
+  if (!response.ok) {
+    tokenStore.clear();
+    return false;
+  }
+
+  tokenStore.set((await response.json()) as AuthResponse);
+  return true;
+}
+
+type ApiOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
   auth?: boolean;
+  retryOnUnauthorized?: boolean;
 };
 
 export async function api<T>(
   path: string,
-  { body, auth = false, headers, ...init }: ApiOptions = {},
+  {
+    body,
+    auth = false,
+    retryOnUnauthorized = true,
+    headers,
+    ...init
+  }: ApiOptions = {},
 ): Promise<T> {
-  const token = tokenStore.get();
+  const token = tokenStore.getAccess();
 
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
+  if (response.status === 401 && auth && retryOnUnauthorized) {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      return api<T>(path, {
+        body,
+        auth,
+        headers,
+        retryOnUnauthorized: false,
+        ...init,
+      });
+    }
+  }
+
   if (!response.ok) {
     const fallback: ApiErrorBody = {
       statusCode: response.status,
-      message: response.statusText || "Request failed",
+      message: response.statusText || 'Request failed',
     };
     const errorBody = await response.json().catch(() => fallback);
 
     if (response.status === 401) {
       tokenStore.clear();
-      window.dispatchEvent(new Event("auth:unauthorized"));
+      window.dispatchEvent(new Event('auth:unauthorized'));
     }
 
     throw new ApiError(response.status, errorBody);
@@ -160,21 +209,23 @@ JSON response. Extend it before using it with a future `204 No Content` route.
 
 After registration or login:
 
-1. Store `access_token`.
+1. Store both `access_token` and `refresh_token`.
 2. Request `GET /auth/me`.
 3. Keep the returned user in React state.
 4. Render routes allowed by `user.role`.
 
-On application startup, request `/auth/me` only when a token exists. A failure
-should clear the token and leave the app unauthenticated. Subscribe to the
-`auth:unauthorized` event from the API helper so an expired token logs the user
-out consistently.
+On application startup, request `/auth/me` when an access token exists. If the
+access token is missing or expired but a refresh token exists, call
+`POST /auth/refresh`, store the rotated token pair, then request `/auth/me`.
+If refresh fails, clear both tokens and leave the app unauthenticated. Subscribe
+to the `auth:unauthorized` event from the API helper so an expired or revoked
+session logs the user out consistently.
 
 ```ts
 type AuthState =
-  | { status: "loading"; user: null }
-  | { status: "anonymous"; user: null }
-  | { status: "authenticated"; user: AuthUser };
+  | { status: 'loading'; user: null }
+  | { status: 'anonymous'; user: null }
+  | { status: 'authenticated'; user: AuthUser };
 
 function canAccess(user: AuthUser | null, roles?: Role[]) {
   return Boolean(user && (!roles || roles.includes(user.role)));
@@ -197,18 +248,18 @@ endpoints include different relations, so optional relation fields are useful
 at the API boundary.
 
 ```ts
-export type Role = "CUSTOMER" | "VENDOR" | "ADMIN";
+export type Role = 'CUSTOMER' | 'VENDOR' | 'ADMIN';
 
 export type OrderStatus =
-  | "PENDING"
-  | "CONFIRMED"
-  | "SHIPPED"
-  | "DELIVERED"
-  | "CANCELLED"
-  | "REFUNDED";
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'SHIPPED'
+  | 'DELIVERED'
+  | 'CANCELLED'
+  | 'REFUNDED';
 
-export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
-export type PaymentMethod = "CARD" | "BANK_TRANSFER" | "WALLET";
+export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
+export type PaymentMethod = 'CARD' | 'BANK_TRANSFER' | 'WALLET';
 export type Money = string;
 
 export interface AuthUser {
@@ -220,7 +271,7 @@ export interface AuthUser {
   isActive?: boolean;
   createdAt: string;
   updatedAt?: string;
-  vendor?: Pick<Vendor, "id" | "storeName" | "isApproved"> | null;
+  vendor?: Pick<Vendor, 'id' | 'storeName' | 'isApproved'> | null;
 }
 
 export interface Vendor {
@@ -232,7 +283,7 @@ export interface Vendor {
   isApproved: boolean;
   createdAt: string;
   updatedAt: string;
-  user?: Pick<AuthUser, "id" | "email" | "firstName" | "lastName">;
+  user?: Pick<AuthUser, 'id' | 'email' | 'firstName' | 'lastName'>;
   products?: Product[];
 }
 
@@ -253,7 +304,7 @@ export interface Inventory {
   quantity: number;
   lowStockAt: number;
   updatedAt: string;
-  product?: Partial<Product> & Pick<Product, "id" | "name">;
+  product?: Partial<Product> & Pick<Product, 'id' | 'name'>;
 }
 
 export interface ReviewReadModel {
@@ -264,7 +315,8 @@ export interface ReviewReadModel {
   comment: string | null;
   createdAt: string;
   updatedAt: string;
-  user?: Pick<AuthUser, "id" | "firstName" | "lastName">;
+  user?: Pick<AuthUser, 'id' | 'firstName' | 'lastName'>;
+  product?: Pick<Product, 'id' | 'name' | 'images'>;
 }
 
 export interface Product {
@@ -278,7 +330,7 @@ export interface Product {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  vendor?: Pick<Vendor, "id" | "storeName" | "logo">;
+  vendor?: Pick<Vendor, 'id' | 'storeName' | 'logo'>;
   category?: Category;
   inventory?: Inventory | { quantity: number } | null;
   reviews?: ReviewReadModel[];
@@ -300,7 +352,8 @@ export interface OrderItem {
   quantity: number;
   unitPrice: Money;
   createdAt: string;
-  product?: Partial<Product> & Pick<Product, "id" | "name" | "images" | "price">;
+  product?: Partial<Product> &
+    Pick<Product, 'id' | 'name' | 'images' | 'price'>;
 }
 
 export interface Payment {
@@ -325,7 +378,7 @@ export interface Order {
   updatedAt: string;
   orderItems?: OrderItem[];
   payment?: Payment | null;
-  user?: Pick<AuthUser, "id" | "email" | "firstName" | "lastName">;
+  user?: Pick<AuthUser, 'id' | 'email' | 'firstName' | 'lastName'>;
 }
 
 export interface Paginated<T> {
@@ -337,14 +390,64 @@ export interface Paginated<T> {
     totalPages: number;
   };
 }
+
+export interface CreateReviewInput {
+  productId: string;
+  rating: number; // integer 1-5
+  comment?: string; // max 1000 characters
+}
+
+export interface ReviewEligibility {
+  eligible: boolean;
+  hasReviewed: boolean;
+  hasDeliveredOrder: boolean;
+  reason: string | null;
+}
+
+export interface AdminAnalytics {
+  totalRevenue: Money;
+  ordersByStatus: Record<OrderStatus, number>;
+  topSellingProducts: Array<{
+    productId: string;
+    name: string;
+    images: string[];
+    vendor: Pick<Vendor, 'id' | 'storeName'>;
+    unitsSold: number;
+    revenue: Money;
+    orderCount: number;
+  }>;
+  vendorPerformance: Array<{
+    vendorId: string;
+    storeName: string;
+    productCount: number;
+    unitsSold: number;
+    revenue: Money;
+    orderCount: number;
+    reviewCount: number;
+    averageRating: number | null;
+  }>;
+}
+
+export interface UploadedProductImage {
+  url: string;
+  publicId: string;
+  width: number;
+  height: number;
+  format: string;
+  bytes: number;
+}
+
+export interface ProductImageUploadResponse {
+  images: UploadedProductImage[];
+}
 ```
 
 Use a decimal-aware formatter for display:
 
 ```ts
-export function formatMoney(value: Money, currency = "NGN") {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
+export function formatMoney(value: Money, currency = 'NGN') {
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
     currency,
   }).format(Number(value));
 }
@@ -358,17 +461,19 @@ payment amounts.
 
 ### Endpoints
 
-| Method | Path | Access | Request | Response | Notable errors |
-| --- | --- | --- | --- | --- | --- |
-| `POST` | `/auth/register` | Public | `{ email, password, firstName, lastName, role? }` | `201`, `AuthResponse` | `400`, `409` email used |
-| `POST` | `/auth/login` | Public | `{ email, password }` | `200`, `AuthResponse` | `401` credentials or disabled account |
-| `GET` | `/auth/me` | Authenticated | — | Basic `AuthUser` without `isActive` or vendor | `401` |
-| `GET` | `/users/me` | Authenticated | — | `AuthUser` including vendor summary | `401`, `404` |
-| `PATCH` | `/users/me` | Authenticated | Any of `{ firstName, lastName, password }` | Updated profile | `400`, `401` |
-| `GET` | `/users` | Admin | — | `AuthUser[]` | `401`, `403` |
-| `GET` | `/users/:id` | Admin | — | User including vendor summary | `401`, `403`, `404` |
-| `PATCH` | `/users/:id/deactivate` | Admin | — | `{ id, isActive: false }` | `401`, `403`, `404` |
-| `PATCH` | `/users/:id/activate` | Admin | — | `{ id, isActive: true }` | `401`, `403`, `404` |
+| Method  | Path                    | Access        | Request                                           | Response                                         | Notable errors                                          |
+| ------- | ----------------------- | ------------- | ------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- |
+| `POST`  | `/auth/register`        | Public        | `{ email, password, firstName, lastName, role? }` | `201`, `AuthResponse`                            | `400`, `409` email used                                 |
+| `POST`  | `/auth/login`           | Public        | `{ email, password }`                             | `200`, `AuthResponse`                            | `401` credentials or disabled account                   |
+| `POST`  | `/auth/refresh`         | Public        | `{ refresh_token }`                               | `200`, `AuthResponse` with rotated refresh token | `400`, `401` invalid, expired, or revoked refresh token |
+| `POST`  | `/auth/logout`          | Authenticated | —                                                 | `{ message: "Logged out successfully" }`         | `401`                                                   |
+| `GET`   | `/auth/me`              | Authenticated | —                                                 | Basic `AuthUser` without `isActive` or vendor    | `401`                                                   |
+| `GET`   | `/users/me`             | Authenticated | —                                                 | `AuthUser` including vendor summary              | `401`, `404`                                            |
+| `PATCH` | `/users/me`             | Authenticated | Any of `{ firstName, lastName, password }`        | Updated profile                                  | `400`, `401`                                            |
+| `GET`   | `/users`                | Admin         | —                                                 | `AuthUser[]`                                     | `401`, `403`                                            |
+| `GET`   | `/users/:id`            | Admin         | —                                                 | User including vendor summary                    | `401`, `403`, `404`                                     |
+| `PATCH` | `/users/:id/deactivate` | Admin         | —                                                 | `{ id, isActive: false }`                        | `401`, `403`, `404`                                     |
+| `PATCH` | `/users/:id/activate`   | Admin         | —                                                 | `{ id, isActive: true }`                         | `401`, `403`, `404`                                     |
 
 Registration rules:
 
@@ -381,12 +486,20 @@ Registration rules:
 
 ```ts
 async function login(email: string, password: string) {
-  const result = await api<AuthResponse>("/auth/login", {
-    method: "POST",
+  const result = await api<AuthResponse>('/auth/login', {
+    method: 'POST',
     body: { email, password },
   });
-  tokenStore.set(result.access_token);
-  return api<AuthUser>("/users/me", { auth: true });
+  tokenStore.set(result);
+  return api<AuthUser>('/users/me', { auth: true });
+}
+
+async function logout() {
+  await api<{ message: string }>('/auth/logout', {
+    method: 'POST',
+    auth: true,
+  }).catch(() => undefined);
+  tokenStore.clear();
 }
 ```
 
@@ -397,13 +510,13 @@ for the lightest session check.
 
 ### Categories
 
-| Method | Path | Access | Request | Response | Notable errors |
-| --- | --- | --- | --- | --- | --- |
-| `GET` | `/categories` | Public | — | `Category[]` with product counts | — |
-| `GET` | `/categories/:id` | Public | — | `Category` with product count | `404` |
-| `POST` | `/categories` | Admin | `CreateCategoryInput` | Created category | `400`, `401`, `403`, `409` slug used |
-| `PATCH` | `/categories/:id` | Admin | `UpdateCategoryInput` | Updated category | `400`, `401`, `403`, `404` |
-| `DELETE` | `/categories/:id` | Admin | — | Deleted category | `401`, `403`, `404` |
+| Method   | Path              | Access | Request               | Response                         | Notable errors                       |
+| -------- | ----------------- | ------ | --------------------- | -------------------------------- | ------------------------------------ |
+| `GET`    | `/categories`     | Public | —                     | `Category[]` with product counts | —                                    |
+| `GET`    | `/categories/:id` | Public | —                     | `Category` with product count    | `404`                                |
+| `POST`   | `/categories`     | Admin  | `CreateCategoryInput` | Created category                 | `400`, `401`, `403`, `409` slug used |
+| `PATCH`  | `/categories/:id` | Admin  | `UpdateCategoryInput` | Updated category                 | `400`, `401`, `403`, `404`           |
+| `DELETE` | `/categories/:id` | Admin  | —                     | Deleted category                 | `401`, `403`, `404`                  |
 
 ```ts
 interface CreateCategoryInput {
@@ -422,14 +535,14 @@ should confirm the action and handle a server error.
 
 ### Products
 
-| Method | Path | Access | Request | Response | Notable errors |
-| --- | --- | --- | --- | --- | --- |
-| `GET` | `/products` | Public | Product query parameters | `Paginated<Product>` | `400` invalid query |
-| `GET` | `/products/:id` | Public | — | Detailed `Product` | `404` |
-| `GET` | `/products/my/products` | Vendor | — | Vendor's `Product[]`, including inactive items | `401`, `403`, `404` profile |
-| `POST` | `/products` | Approved vendor | `CreateProductInput` | Product with inventory | `400`, `401`, `403` |
-| `PATCH` | `/products/:id` | Owning vendor | `UpdateProductInput` | Updated product | `400`, `401`, `403`, `404` |
-| `DELETE` | `/products/:id` | Owning vendor | — | Product with `isActive: false` | `401`, `403`, `404` |
+| Method   | Path                    | Access          | Request                  | Response                                       | Notable errors              |
+| -------- | ----------------------- | --------------- | ------------------------ | ---------------------------------------------- | --------------------------- |
+| `GET`    | `/products`             | Public          | Product query parameters | `Paginated<Product>`                           | `400` invalid query         |
+| `GET`    | `/products/:id`         | Public          | —                        | Detailed `Product`                             | `404`                       |
+| `GET`    | `/products/my/products` | Vendor          | —                        | Vendor's `Product[]`, including inactive items | `401`, `403`, `404` profile |
+| `POST`   | `/products`             | Approved vendor | `CreateProductInput`     | Product with inventory                         | `400`, `401`, `403`         |
+| `PATCH`  | `/products/:id`         | Owning vendor   | `UpdateProductInput`     | Updated product                                | `400`, `401`, `403`, `404`  |
+| `DELETE` | `/products/:id`         | Owning vendor   | —                        | Product with `isActive: false`                 | `401`, `403`, `404`         |
 
 Supported product-list query parameters:
 
@@ -447,7 +560,7 @@ interface ProductFilters {
 function productQuery(filters: ProductFilters) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== "") params.set(key, String(value));
+    if (value !== undefined && value !== '') params.set(key, String(value));
   });
   return api<Paginated<Product>>(`/products?${params}`);
 }
@@ -482,21 +595,136 @@ update inventory before customers can order it. Product deletion is a soft
 delete and can be reversed with `PATCH /products/:id` and
 `{ "isActive": true }`.
 
-## 6. Vendors and inventory
+### Product image uploads
+
+Product image uploads are handled separately from product create/update. Upload
+files first, then pass the returned Cloudinary URLs as `images` in
+`CreateProductInput` or `UpdateProductInput`.
+
+Cloudinary credentials are backend-only. Do not put `CLOUDINARY_CLOUD_NAME`,
+`CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, or any Cloudinary secret in the
+frontend environment.
+
+| Method | Path                      | Access | Request                                                                                | Response                     | Notable errors                                                         |
+| ------ | ------------------------- | ------ | -------------------------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
+| `POST` | `/uploads/product-images` | Vendor | `multipart/form-data` field `images`, max 5 files, max 5MB each, image MIME types only | `ProductImageUploadResponse` | `400`, `401`, `403`, `500` missing Cloudinary config or upload failure |
+
+The normal JSON `api()` helper sets `Content-Type: application/json`, so use a
+small dedicated helper for `FormData`. Let the browser set the multipart
+boundary; do not manually set `Content-Type`.
+
+```ts
+async function uploadProductImages(files: File[]) {
+  const form = new FormData();
+  files.forEach((file) => form.append('images', file));
+
+  const response = await fetch(`${API_URL}/uploads/product-images`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${tokenStore.getAccess()}`,
+    },
+    body: form,
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({
+      statusCode: response.status,
+      message: response.statusText || 'Upload failed',
+    }));
+    throw new ApiError(response.status, body);
+  }
+
+  return response.json() as Promise<ProductImageUploadResponse>;
+}
+
+async function createProductWithUploads(
+  input: Omit<CreateProductInput, 'images'>,
+  files: File[],
+) {
+  const uploaded = files.length
+    ? await uploadProductImages(files)
+    : { images: [] };
+
+  return api<Product>('/products', {
+    method: 'POST',
+    auth: true,
+    body: {
+      ...input,
+      images: uploaded.images.map((image) => image.url),
+    },
+  });
+}
+```
+
+Show client-side validation before upload for a better experience, but treat
+the backend limits as authoritative. Product uploads are in scope; vendor logos
+and category images still use plain URL string fields.
+
+## 6. Reviews
+
+Reviews are now partly public and partly role-protected:
+
+- anyone can read paginated reviews for a product;
+- authenticated customers can check whether they are eligible to review;
+- customers can create one review per product after a delivered order;
+- vendors can list reviews across their own products.
+
+### Endpoints
+
+| Method | Path                                       | Access   | Request             | Response                                          | Notable errors                                                 |
+| ------ | ------------------------------------------ | -------- | ------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
+| `GET`  | `/reviews/products/:productId`             | Public   | `page?`, `limit?`   | `Paginated<ReviewReadModel>`                      | `400`, `404` product                                           |
+| `GET`  | `/reviews/products/:productId/eligibility` | Customer | —                   | `ReviewEligibility`                               | `401`, `403`, `404` product                                    |
+| `POST` | `/reviews`                                 | Customer | `CreateReviewInput` | Created review with user/product summaries        | `400`, `401`, `403` no delivered order, `404`, `409` duplicate |
+| `GET`  | `/reviews/vendor/my-products`              | Vendor   | `page?`, `limit?`   | `Paginated<ReviewReadModel>` with product summary | `401`, `403`, `404` vendor profile                             |
+
+```ts
+async function loadProductReviews(productId: string, page = 1) {
+  return api<Paginated<ReviewReadModel>>(
+    `/reviews/products/${productId}?page=${page}&limit=20`,
+  );
+}
+
+async function loadReviewEligibility(productId: string) {
+  return api<ReviewEligibility>(`/reviews/products/${productId}/eligibility`, {
+    auth: true,
+  });
+}
+
+async function createReview(input: CreateReviewInput) {
+  return api<ReviewReadModel>('/reviews', {
+    method: 'POST',
+    auth: true,
+    body: input,
+  });
+}
+```
+
+The backend enforces eligibility. Do not infer review permission only from
+client-side order history. A product is reviewable only when the authenticated
+customer has a `DELIVERED` order containing that product and has not already
+reviewed it.
+
+On a product detail page, use the public product detail response for the newest
+five reviews and total review count, then call the paginated reviews endpoint
+when the user opens a full reviews view. For authenticated customers, call the
+eligibility endpoint before showing an enabled review form.
+
+## 7. Vendors and inventory
 
 ### Vendors
 
 The `vendors` controller currently has a controller-level JWT guard. Therefore,
 **all vendor endpoints, including `GET /vendors/:id`, require authentication**.
 
-| Method | Path | Access | Request | Response | Notable errors |
-| --- | --- | --- | --- | --- | --- |
-| `POST` | `/vendors` | Authenticated | `{ storeName, description? }` | Created vendor | `400`, `401`, `409` profile exists |
-| `GET` | `/vendors/my-store` | Vendor | — | Vendor with all products | `401`, `403`, `404` |
-| `PATCH` | `/vendors/my-store` | Vendor | Store update | Updated vendor | `400`, `401`, `403`, `404` |
-| `GET` | `/vendors` | Admin | — | All vendors with user summary | `401`, `403` |
-| `GET` | `/vendors/:id` | Authenticated | — | Vendor with up to 10 active products | `401`, `404` |
-| `PATCH` | `/vendors/:id/approve` | Admin | — | Approved vendor | `401`, `403`, `404` |
+| Method  | Path                   | Access        | Request                       | Response                             | Notable errors                     |
+| ------- | ---------------------- | ------------- | ----------------------------- | ------------------------------------ | ---------------------------------- |
+| `POST`  | `/vendors`             | Authenticated | `{ storeName, description? }` | Created vendor                       | `400`, `401`, `409` profile exists |
+| `GET`   | `/vendors/my-store`    | Vendor        | —                             | Vendor with all products             | `401`, `403`, `404`                |
+| `PATCH` | `/vendors/my-store`    | Vendor        | Store update                  | Updated vendor                       | `400`, `401`, `403`, `404`         |
+| `GET`   | `/vendors`             | Admin         | —                             | All vendors with user summary        | `401`, `403`                       |
+| `GET`   | `/vendors/:id`         | Authenticated | —                             | Vendor with up to 10 active products | `401`, `404`                       |
+| `PATCH` | `/vendors/:id/approve` | Admin         | —                             | Approved vendor                      | `401`, `403`, `404`                |
 
 ```ts
 interface CreateVendorInput {
@@ -520,12 +748,12 @@ their store before approval, but product creation fails until approval.
 
 All inventory endpoints require the `VENDOR` role.
 
-| Method | Path | Access | Request | Response | Notable errors |
-| --- | --- | --- | --- | --- | --- |
-| `GET` | `/inventory` | Vendor | — | Own `Inventory[]`, lowest quantity first | `401`, `403`, `404` profile |
-| `GET` | `/inventory/low-stock` | Vendor | — | Own inventory at or below threshold | `401`, `403`, `404` profile |
-| `GET` | `/inventory/:productId` | Vendor | — | Inventory with product/vendor summary | `401`, `403`, `404` |
-| `PATCH` | `/inventory/:productId` | Owning vendor | `{ quantity, lowStockAt? }` | Updated inventory | `400`, `401`, `403`, `404` |
+| Method  | Path                    | Access        | Request                     | Response                                 | Notable errors              |
+| ------- | ----------------------- | ------------- | --------------------------- | ---------------------------------------- | --------------------------- |
+| `GET`   | `/inventory`            | Vendor        | —                           | Own `Inventory[]`, lowest quantity first | `401`, `403`, `404` profile |
+| `GET`   | `/inventory/low-stock`  | Vendor        | —                           | Own inventory at or below threshold      | `401`, `403`, `404` profile |
+| `GET`   | `/inventory/:productId` | Vendor        | —                           | Inventory with product/vendor summary    | `401`, `403`, `404`         |
+| `PATCH` | `/inventory/:productId` | Owning vendor | `{ quantity, lowStockAt? }` | Updated inventory                        | `400`, `401`, `403`, `404`  |
 
 ```ts
 interface UpdateInventoryInput {
@@ -538,20 +766,20 @@ The single-inventory read route checks the caller's role but does not currently
 check product ownership. Do not use that behavior to expose another vendor's
 data in the UI; ownership is enforced when updating.
 
-## 7. Orders
+## 8. Orders
 
 All order endpoints require authentication. Creation, own-order reads, and
 cancellation are not explicitly restricted to `CUSTOMER` by a role guard, but
 the UI should present them as customer workflows.
 
-| Method | Path | Access | Request | Response | Notable errors |
-| --- | --- | --- | --- | --- | --- |
-| `POST` | `/orders` | Authenticated | `CreateOrderInput` | Created order with items | `400` invalid product or stock, `401` |
-| `GET` | `/orders/my-orders` | Authenticated | — | Own `Order[]` with products/payment | `401` |
-| `GET` | `/orders/:id` | Owner | — | Detailed order | `401`, `403`, `404` |
-| `PATCH` | `/orders/:id/cancel` | Owner | — | Cancelled order | `400` not pending, `401`, `403`, `404` |
-| `GET` | `/orders` | Admin | — | All orders with users/items/payment | `401`, `403` |
-| `PATCH` | `/orders/:id/status` | Admin | `{ status }` | Updated order | `400` invalid transition, `401`, `403`, `404` |
+| Method  | Path                 | Access        | Request            | Response                            | Notable errors                                |
+| ------- | -------------------- | ------------- | ------------------ | ----------------------------------- | --------------------------------------------- |
+| `POST`  | `/orders`            | Authenticated | `CreateOrderInput` | Created order with items            | `400` invalid product or stock, `401`         |
+| `GET`   | `/orders/my-orders`  | Authenticated | —                  | Own `Order[]` with products/payment | `401`                                         |
+| `GET`   | `/orders/:id`        | Owner         | —                  | Detailed order                      | `401`, `403`, `404`                           |
+| `PATCH` | `/orders/:id/cancel` | Owner         | —                  | Cancelled order                     | `400` not pending, `401`, `403`, `404`        |
+| `GET`   | `/orders`            | Admin         | —                  | All orders with users/items/payment | `401`, `403`                                  |
+| `PATCH` | `/orders/:id/status` | Admin         | `{ status }`       | Updated order                       | `400` invalid transition, `401`, `403`, `404` |
 
 ```ts
 interface CreateOrderInput {
@@ -603,14 +831,14 @@ An admin can list all orders but receives `403` when requesting another user's
 order detail. Build the admin list from `GET /orders`; do not rely on a separate
 detail request until the backend is corrected.
 
-## 8. Payments and Paystack
+## 9. Payments and Paystack
 
-| Method | Path | Access | Request | Response | Notable errors |
-| --- | --- | --- | --- | --- | --- |
-| `POST` | `/payments/initialize` | Authenticated owner | `{ orderId, method }` | `{ authorizationUrl, reference }` | `400`, `401`, `403`, `404` |
-| `GET` | `/payments/order/:orderId` | Authenticated owner | — | `Payment` | `401`, `403`, `404` |
-| `GET` | `/payments/verify/:reference` | Authenticated owner | — | Verification result | `401`, `403`, `404` |
-| `POST` | `/payments/webhook` | Paystack only | Signed raw event | `{ received: true }` | `400` invalid signature |
+| Method | Path                          | Access              | Request               | Response                          | Notable errors             |
+| ------ | ----------------------------- | ------------------- | --------------------- | --------------------------------- | -------------------------- |
+| `POST` | `/payments/initialize`        | Authenticated owner | `{ orderId, method }` | `{ authorizationUrl, reference }` | `400`, `401`, `403`, `404` |
+| `GET`  | `/payments/order/:orderId`    | Authenticated owner | —                     | `Payment`                         | `401`, `403`, `404`        |
+| `GET`  | `/payments/verify/:reference` | Authenticated owner | —                     | Verification result               | `401`, `403`, `404`        |
+| `POST` | `/payments/webhook`           | Paystack only       | Signed raw event      | `{ received: true }`              | `400` invalid signature    |
 
 ```ts
 interface InitializePaymentInput {
@@ -643,13 +871,13 @@ Recommended flow:
    backend state.
 
 ```ts
-const payment = await api<InitializePaymentResponse>("/payments/initialize", {
-  method: "POST",
+const payment = await api<InitializePaymentResponse>('/payments/initialize', {
+  method: 'POST',
   auth: true,
-  body: { orderId, method: "CARD" satisfies PaymentMethod },
+  body: { orderId, method: 'CARD' satisfies PaymentMethod },
 });
 
-sessionStorage.setItem("pending_payment_reference", payment.reference);
+sessionStorage.setItem('pending_payment_reference', payment.reference);
 window.location.assign(payment.authorizationUrl);
 ```
 
@@ -667,7 +895,37 @@ The backend currently accepts `CARD`, `BANK_TRANSFER`, and `WALLET` as methods,
 although actual availability still depends on Paystack and backend behavior.
 Initialization is blocked for cancelled and successfully paid orders.
 
-## 9. Suggested React screens
+## 10. Admin analytics
+
+Admin analytics are available behind the backend `Role.ADMIN` guard.
+
+| Method | Path               | Access | Request                               | Response         | Notable errors      |
+| ------ | ------------------ | ------ | ------------------------------------- | ---------------- | ------------------- |
+| `GET`  | `/admin/analytics` | Admin  | `limit?` query, default `5`, max `20` | `AdminAnalytics` | `400`, `401`, `403` |
+
+```ts
+async function loadAdminAnalytics(limit = 5) {
+  return api<AdminAnalytics>(`/admin/analytics?limit=${limit}`, {
+    auth: true,
+  });
+}
+```
+
+The response is intended for dashboard cards and ranked lists:
+
+- `totalRevenue` sums successful payments for confirmed, shipped, and delivered
+  orders;
+- `ordersByStatus` includes every `OrderStatus`, even when the count is `0`;
+- `topSellingProducts` ranks paid, non-cancelled, non-refunded order items by
+  units sold and revenue;
+- `vendorPerformance` includes product count, units sold, revenue, paid order
+  count, review count, and average rating.
+
+Revenue fields are string-serialized money values. Format them with the same
+`formatMoney` helper used elsewhere in the app. Keep this route admin-only in
+the UI, but continue to handle `403` because the backend guard is authoritative.
+
+## 11. Suggested React screens
 
 ### Public and customer
 
@@ -684,7 +942,7 @@ Initialization is blocked for cancelled and successfully paid orders.
 
 - Approval-aware store dashboard.
 - Store profile editor.
-- Product list/editor with activation controls.
+- Product list/editor with image upload and activation controls.
 - Inventory table and low-stock view.
 
 ### Admin
@@ -693,86 +951,55 @@ Initialization is blocked for cancelled and successfully paid orders.
 - Vendor approval queue.
 - Category management.
 - Order list and valid status-transition controls.
-- A reserved analytics route for the planned feature, with no API call yet.
+- Analytics dashboard backed by `GET /admin/analytics`.
 
 Route visibility should be derived from `AuthUser.role`; resource ownership and
 approval failures must still be handled from API responses.
 
-## 10. Features not implemented yet
+## 12. Email notifications
 
-The following roadmap items must not be treated as live API contracts. Keep
-their frontend code behind disabled UI, feature flags, or isolated component
-boundaries until the backend publishes routes and response shapes.
-
-### Step 10 — Reviews
-
-Planned behavior:
-
-- customers can review a product they have ordered;
-- one review is allowed per customer per product;
-- vendors can see reviews for their products.
-
-The database already has a review model with a unique
-`(userId, productId)` constraint. Product detail responses currently include the
-five newest stored reviews, and product list/detail responses include review
-counts. However, there is no reviews controller or frontend-callable endpoint
-for:
-
-- creating or editing a review;
-- checking whether the customer is eligible;
-- listing a complete product review history;
-- listing reviews for a vendor's products.
-
-The frontend may create presentational `ReviewList`, `ReviewSummary`, and
-`ReviewForm` boundaries. It should keep submission disabled or hidden until the
-backend contract exists. Do not infer eligibility only from local order data;
-the backend must enforce purchase history and uniqueness.
-
-### Step 11 — Email notifications
-
-Planned behavior uses Nodemailer and Handlebars templates to email customers
-when:
+Email notifications are backend side effects, not frontend-callable endpoints.
+The backend uses Nodemailer and Handlebars templates for:
 
 - an order is confirmed;
-- payment succeeds;
+- payment successful;
 - an order ships.
 
-This is a backend side effect and requires no frontend API call. The frontend
-should continue to render status from order and payment endpoints and must not
-claim that an email was delivered merely because a status update succeeded.
-There are currently no email preference, delivery-history, or resend endpoints.
+The frontend should continue to render order and payment state from the normal
+order/payment endpoints. Do not show “email delivered” as a guaranteed outcome
+of a status update; SMTP delivery can fail independently of the API mutation.
 
-### Step 12 — Admin analytics
+Emails are triggered after successful backend state changes:
 
-Planned admin-only metrics:
+- Paystack `charge.success` updates the payment to `SUCCESS`, confirms the
+  order, and sends payment successful and order confirmed emails when those
+  statuses actually changed.
+- Admin transition to `CONFIRMED` sends the order confirmed email.
+- Admin transition to `SHIPPED` sends the order shipped email.
 
-- total revenue;
-- orders by status;
-- top-selling products;
-- vendor performance.
+When SMTP config is missing in development, the backend logs the intended email
+and continues. There are no email preference, delivery-history, resend, or
+unsubscribe endpoints in the current API.
 
-No analytics module, routes, query parameters, or response types exist yet.
-Reserve an admin-only page with loading, empty, error, and unavailable states,
-but do not define chart data types or make speculative requests. All eventual
-analytics requests must use the bearer token and must remain protected by the
-backend `ADMIN` role guard.
+## 13. Current integration limitations
 
-## 11. Current integration limitations
-
-- Access tokens expire after 15 minutes; there is no refresh endpoint.
-- Logout is frontend-only token removal.
+- Access tokens expire after 15 minutes; refresh tokens expire after 7 days and
+  rotate on refresh.
+- Logout has a server endpoint, but the frontend should still clear local token
+  storage after calling it.
 - There is no cart or saved-cart endpoint.
-- There is no image upload endpoint; product image and logo fields accept
-  strings, so hosting/upload must be supplied separately.
+- Product image uploads exist, but vendor logos and category images still use
+  plain URL string fields.
 - There is no vendor-facing order list or fulfillment endpoint.
 - Admin order detail is blocked for orders owned by other users even though
   admin order listing is available.
 - The vendor profile read route requires authentication despite its source
   comment describing it as public.
 - Creating a vendor profile does not promote a customer's role.
-- Reviews are partly present in read models but cannot yet be created or fully
-  queried.
-- Email notifications and admin analytics are not implemented.
+- Reviews can be created and queried, but there is no review edit or delete
+  endpoint.
+- Email notifications have no frontend API, delivery history, preferences, or
+  resend endpoint.
 
 Treat these as backend contract gaps rather than problems to work around with
 client-side authorization or fabricated data.

@@ -1,4 +1,5 @@
 import type {
+  AdminAnalytics,
   ApiErrorBody,
   AuthResponse,
   AuthUser,
@@ -6,6 +7,7 @@ import type {
   CreateCategoryInput,
   CreateOrderInput,
   CreateProductInput,
+  CreateReviewInput,
   InitializePaymentResponse,
   Inventory,
   Order,
@@ -15,6 +17,9 @@ import type {
   PaymentMethod,
   Product,
   ProductFilters,
+  ProductImageUploadResponse,
+  ReviewEligibility,
+  ReviewReadModel,
   Role,
   ShippingAddress,
   UpdateCategoryInput,
@@ -27,12 +32,23 @@ import type {
 
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3333/api/v1';
 
-const TOKEN_KEY = 'ecommerce_access_token';
+const ACCESS_TOKEN_KEY = 'ecommerce_access_token';
+const REFRESH_TOKEN_KEY = 'ecommerce_refresh_token';
 
 export const tokenStore = {
-  get: () => sessionStorage.getItem(TOKEN_KEY),
-  set: (token: string) => sessionStorage.setItem(TOKEN_KEY, token),
-  clear: () => sessionStorage.removeItem(TOKEN_KEY),
+  get: () => sessionStorage.getItem(ACCESS_TOKEN_KEY),
+  getAccess: () => sessionStorage.getItem(ACCESS_TOKEN_KEY),
+  getRefresh: () => sessionStorage.getItem(REFRESH_TOKEN_KEY),
+  hasSession: () =>
+    Boolean(sessionStorage.getItem(ACCESS_TOKEN_KEY) || sessionStorage.getItem(REFRESH_TOKEN_KEY)),
+  set: (tokens: AuthResponse) => {
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
+    sessionStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+  },
+  clear: () => {
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+  },
 };
 
 export class ApiError extends Error {
@@ -47,6 +63,7 @@ export class ApiError extends Error {
 type ApiOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
   auth?: boolean;
+  retryOnUnauthorized?: boolean;
 };
 
 function queryString<T extends object>(values: T) {
@@ -60,9 +77,9 @@ function queryString<T extends object>(values: T) {
 
 export async function api<T>(
   path: string,
-  { body, auth = false, headers, ...init }: ApiOptions = {},
+  { body, auth = false, retryOnUnauthorized = true, headers, ...init }: ApiOptions = {},
 ): Promise<T> {
-  const token = tokenStore.get();
+  const token = tokenStore.getAccess();
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
@@ -73,10 +90,76 @@ export async function api<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
+  if (response.status === 401 && auth && retryOnUnauthorized) {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      return api<T>(path, {
+        body,
+        auth,
+        headers,
+        retryOnUnauthorized: false,
+        ...init,
+      });
+    }
+  }
+
   if (!response.ok) {
     const fallback: ApiErrorBody = {
       statusCode: response.status,
       message: response.statusText || 'Request failed',
+    };
+    const errorBody = await response.json().catch(() => fallback);
+    if (response.status === 401) {
+      tokenStore.clear();
+      window.dispatchEvent(new Event('auth:unauthorized'));
+    }
+    throw new ApiError(response.status, errorBody);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+async function refreshSession() {
+  const refreshToken = tokenStore.getRefresh();
+  if (!refreshToken) return false;
+
+  const response = await fetch(`${API_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+
+  if (!response.ok) {
+    tokenStore.clear();
+    return false;
+  }
+
+  tokenStore.set((await response.json()) as AuthResponse);
+  return true;
+}
+
+async function authorizedMultipart<T>(
+  path: string,
+  body: FormData,
+  retryOnUnauthorized = true,
+): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      ...(tokenStore.getAccess() ? { Authorization: `Bearer ${tokenStore.getAccess()}` } : {}),
+    },
+    body,
+  });
+
+  if (response.status === 401 && retryOnUnauthorized) {
+    const refreshed = await refreshSession();
+    if (refreshed) return authorizedMultipart<T>(path, body, false);
+  }
+
+  if (!response.ok) {
+    const fallback: ApiErrorBody = {
+      statusCode: response.status,
+      message: response.statusText || 'Upload failed',
     };
     const errorBody = await response.json().catch(() => fallback);
     if (response.status === 401) {
@@ -99,9 +182,48 @@ export const authApi = {
     lastName: string;
     role: Exclude<Role, 'ADMIN'>;
   }) => api<AuthResponse>('/auth/register', { method: 'POST', body }),
+  refresh: (refreshToken: string) =>
+    api<AuthResponse>('/auth/refresh', {
+      method: 'POST',
+      body: { refresh_token: refreshToken },
+    }),
+  logout: () =>
+    api<{ message: string }>('/auth/logout', {
+      method: 'POST',
+      auth: true,
+    }),
   me: () => api<AuthUser>('/users/me', { auth: true }),
   updateMe: (body: { firstName?: string; lastName?: string; password?: string }) =>
     api<AuthUser>('/users/me', { method: 'PATCH', auth: true, body }),
+};
+
+export const uploadApi = {
+  productImages: (files: File[]) => {
+    const form = new FormData();
+    files.forEach((file) => form.append('images', file));
+    return authorizedMultipart<ProductImageUploadResponse>('/uploads/product-images', form);
+  },
+};
+
+export const reviewsApi = {
+  product: (productId: string, page = 1, limit = 20) =>
+    api<Paginated<ReviewReadModel>>(
+      `/reviews/products/${productId}${queryString({ page, limit })}`,
+    ),
+  eligibility: (productId: string) =>
+    api<ReviewEligibility>(`/reviews/products/${productId}/eligibility`, { auth: true }),
+  create: (body: CreateReviewInput) =>
+    api<ReviewReadModel>('/reviews', { method: 'POST', auth: true, body }),
+  vendor: (page = 1, limit = 20) =>
+    api<Paginated<ReviewReadModel>>(
+      `/reviews/vendor/my-products${queryString({ page, limit })}`,
+      { auth: true },
+    ),
+};
+
+export const adminApi = {
+  analytics: (limit = 5) =>
+    api<AdminAnalytics>(`/admin/analytics${queryString({ limit })}`, { auth: true }),
 };
 
 export const catalogApi = {

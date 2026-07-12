@@ -1,6 +1,6 @@
 import type { Money } from '../types';
 
-export function formatMoney(value: Money, currency = 'NGN') {
+export function formatMoney(value: Money | number, currency = 'NGN') {
   return new Intl.NumberFormat('en-NG', {
     style: 'currency',
     currency,

@@ -1,6 +1,6 @@
 import { useId, useState, type ReactNode } from 'react';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
-import { useField } from 'formik';
+import { useField, useFormikContext } from 'formik';
 import { cn } from '../../lib/utils';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -242,6 +242,63 @@ export function SelectField({
         >
           {children}
         </Select>
+      )}
+    </FieldShell>
+  );
+}
+
+type FileFieldProps = Omit<
+  React.ComponentProps<typeof Input>,
+  'name' | 'type' | 'value' | 'onChange'
+> & {
+  name: string;
+  label: string;
+  description?: string;
+  wrapperClassName?: string;
+};
+
+export function FileField({
+  name,
+  label,
+  description,
+  wrapperClassName,
+  className,
+  ...props
+}: FileFieldProps) {
+  const [field, meta] = useField<File[]>(name);
+  const { setFieldTouched, setFieldValue } = useFormikContext();
+  const files = Array.isArray(field.value) ? field.value : [];
+
+  return (
+    <FieldShell
+      name={name}
+      label={label}
+      description={description}
+      className={wrapperClassName}
+    >
+      {({ id, describedBy, invalid }) => (
+        <div className="grid gap-2">
+          <Input
+            id={id}
+            aria-describedby={describedBy}
+            aria-invalid={invalid}
+            className={cn(
+              invalid && 'field-invalid-shake border-red-500/55',
+              className,
+            )}
+            type="file"
+            onBlur={() => setFieldTouched(name, true)}
+            onChange={(event) =>
+              setFieldValue(name, Array.from(event.currentTarget.files ?? []))
+            }
+            {...props}
+          />
+          {files.length > 0 && !meta.error && (
+            <p className="m-0 text-sm leading-[1.5] text-muted">
+              {files.map((file) => file.name).join(', ')}
+            </p>
+          )}
+        </div>
       )}
     </FieldShell>
   );

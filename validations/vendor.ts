@@ -1,12 +1,14 @@
 import * as yup from 'yup';
 import {
-  commaSeparatedUrls,
   optionalNumber,
   optionalText,
   optionalUrl,
   requiredNumber,
   requiredText,
 } from './common';
+
+const MAX_PRODUCT_IMAGES = 5;
+const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export const vendorStoreSchema = yup.object({
   storeName: requiredText('Store name', 3),
@@ -21,7 +23,20 @@ export const vendorProductSchema = yup.object({
   price: requiredNumber('Price', 0),
   categoryId: requiredText('Category'),
   description: optionalText,
-  images: commaSeparatedUrls,
+  imageFiles: yup
+    .mixed<File[]>()
+    .test('file-count', 'Upload up to 5 images', (files) => !files || files.length <= MAX_PRODUCT_IMAGES)
+    .test(
+      'file-size',
+      'Each image must be 5MB or smaller',
+      (files) => !files || files.every((file) => file.size <= MAX_PRODUCT_IMAGE_BYTES),
+    )
+    .test(
+      'file-type',
+      'Only image files are allowed',
+      (files) => !files || files.every((file) => file.type.startsWith('image/')),
+    )
+    .default([]),
 });
 
 export type VendorProductValues = {
@@ -29,7 +44,7 @@ export type VendorProductValues = {
   price: string;
   categoryId: string;
   description: string;
-  images: string;
+  imageFiles: File[];
 };
 
 export const inventorySchema = yup.object({

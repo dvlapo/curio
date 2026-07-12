@@ -1,12 +1,29 @@
-import { useMemo } from 'react';
-import { Form, Formik } from 'formik';
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Form, Formik, useFormikContext } from 'formik';
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { catalogApi, ordersApi, paymentsApi } from '../api';
+import { catalogApi, ordersApi, paymentsApi, reviewsApi } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useCart } from '../cart/CartContext';
-import { FormError, PasswordField, SelectField, TextField } from '../components/forms/FormFields';
+import {
+  FormError,
+  PasswordField,
+  SelectField,
+  TextareaField,
+  TextField,
+} from '../components/forms/FormFields';
 import { ImageWithFallback } from '../components/ImageWithFallback';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -17,9 +34,11 @@ import {
   checkoutSchema,
   productFilterSchema,
   profileSchema,
+  reviewSchema,
   type CheckoutValues,
   type ProductFilterValues,
   type ProfileValues,
+  type ReviewValues,
 } from '../../validations';
 
 function PageIntro({ title, body }: { title: string; body?: string }) {
@@ -51,7 +70,14 @@ function ProductTile({ product }: { product: Product }) {
       </Link>
       <div className="commerce-meta">
         <span>{product.category?.name ?? 'Marketplace'}</span>
-        {product._count?.reviews !== undefined && <span>{product._count.reviews} reviews</span>}
+        {product.vendor && (
+          <Link to={`/products?vendorId=${product.vendor.id}`}>
+            {product.vendor.storeName}
+          </Link>
+        )}
+        {product._count?.reviews !== undefined && (
+          <span>{product._count.reviews} reviews</span>
+        )}
       </div>
       <h2>
         <Link to={`/products/${product.id}`}>{product.name}</Link>
@@ -59,11 +85,121 @@ function ProductTile({ product }: { product: Product }) {
       <p>{product.description ?? 'A Curio marketplace find.'}</p>
       <div className="commerce-bottom">
         <strong>{formatMoney(product.price)}</strong>
-        <Button variant="outline" size="sm" onClick={add} disabled={stock === 0}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={add}
+          disabled={stock === 0}
+        >
           {stock === 0 ? 'Out of stock' : 'Add to cart'}
         </Button>
       </div>
     </article>
+  );
+}
+
+function productFilterParams(values: ProductFilterValues) {
+  const next = new URLSearchParams();
+  Object.entries(values).forEach(([key, value]) => {
+    const clean = String(value ?? '').trim();
+    if (clean) next.set(key, clean);
+  });
+  next.set('page', '1');
+  return next;
+}
+
+function DebouncedProductSearch({
+  setParams,
+}: {
+  setParams: ReturnType<typeof useSearchParams>[1];
+}) {
+  const { values } = useFormikContext<ProductFilterValues>();
+  const mounted = useRef(false);
+  const valuesRef = useRef(values);
+
+  useEffect(() => {
+    valuesRef.current = values;
+  }, [values]);
+
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setParams(productFilterParams(valuesRef.current));
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [setParams, values.search]);
+
+  return null;
+}
+
+const reviewInitialValues: ReviewValues = {
+  rating: '5',
+  comment: '',
+};
+
+function ReviewForm({
+  productId,
+  onCreated,
+}: {
+  productId: string;
+  onCreated: () => void;
+}) {
+  const mutation = useMutation({ mutationFn: reviewsApi.create });
+
+  return (
+    <Formik<ReviewValues>
+      initialValues={reviewInitialValues}
+      validationSchema={reviewSchema}
+      onSubmit={async (values, { resetForm, setStatus, setSubmitting }) => {
+        setStatus(undefined);
+        try {
+          const next = reviewSchema.cast(values);
+          await mutation.mutateAsync({
+            productId,
+            rating: Number(next.rating),
+            ...(next.comment ? { comment: next.comment } : {}),
+          });
+          resetForm();
+          toast.success('Review submitted');
+          onCreated();
+        } catch (err) {
+          setStatus(getErrorMessage(err, 'Could not submit review'));
+        } finally {
+          setSubmitting(false);
+        }
+      }}
+    >
+      {({ isSubmitting, status: formStatus }) => (
+        <Form className="review-form" noValidate>
+          <FormError>{formStatus}</FormError>
+          <SelectField name="rating" label="Rating">
+            {[5, 4, 3, 2, 1].map((rating) => (
+              <option key={rating} value={rating}>
+                {rating} stars
+              </option>
+            ))}
+          </SelectField>
+          <TextareaField
+            name="comment"
+            label="Comment"
+            placeholder="What stood out?"
+            maxLength={1000}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            isLoading={isSubmitting || mutation.isPending}
+          >
+            Submit review
+          </Button>
+        </Form>
+      )}
+    </Formik>
   );
 }
 
@@ -72,25 +208,42 @@ export function ProductListPage() {
   const page = Number(params.get('page') ?? 1);
   const search = params.get('search') ?? '';
   const categoryId = params.get('categoryId') ?? undefined;
+  const vendorId = params.get('vendorId') ?? undefined;
   const minPriceParam = params.get('minPrice') ?? '';
   const maxPriceParam = params.get('maxPrice') ?? '';
   const minPrice = minPriceParam ? Number(minPriceParam) : undefined;
   const maxPrice = maxPriceParam ? Number(maxPriceParam) : undefined;
 
-  const categories = useQuery({ queryKey: ['categories'], queryFn: catalogApi.categories });
+  const categories = useQuery({
+    queryKey: ['categories'],
+    queryFn: catalogApi.categories,
+  });
   const products = useQuery({
-    queryKey: ['products', { page, search, categoryId, minPrice, maxPrice }],
-    queryFn: () => catalogApi.products({ page, limit: 12, search, categoryId, minPrice, maxPrice }),
+    queryKey: [
+      'products',
+      { page, search, categoryId, vendorId, minPrice, maxPrice },
+    ],
+    queryFn: () =>
+      catalogApi.products({
+        page,
+        limit: 12,
+        search,
+        categoryId,
+        vendorId,
+        minPrice,
+        maxPrice,
+      }),
   });
 
   const initialFilters = useMemo<ProductFilterValues>(
     () => ({
       search,
       categoryId: categoryId ?? '',
+      vendorId: vendorId ?? '',
       minPrice: minPriceParam,
       maxPrice: maxPriceParam,
     }),
-    [categoryId, maxPriceParam, minPriceParam, search],
+    [categoryId, maxPriceParam, minPriceParam, search, vendorId],
   );
 
   const meta = products.data?.meta;
@@ -105,18 +258,21 @@ export function ProductListPage() {
         enableReinitialize
         initialValues={initialFilters}
         validationSchema={productFilterSchema}
-        onSubmit={(values) => {
-          const next = new URLSearchParams();
-          Object.entries(values).forEach(([key, value]) => {
-            const clean = String(value ?? '').trim();
-            if (clean) next.set(key, clean);
-          });
-          next.set('page', '1');
-          setParams(next);
-        }}
+        onSubmit={(values) => setParams(productFilterParams(values))}
       >
         <Form className="filter-panel" noValidate>
-          <TextField name="search" label="Search" placeholder="Sneakers, lamp, serum" />
+          <DebouncedProductSearch setParams={setParams} />
+          <TextField
+            name="search"
+            label="Search"
+            placeholder="Sneakers, lamp, serum"
+          />
+          <input
+            type="hidden"
+            name="vendorId"
+            value={vendorId ?? ''}
+            readOnly
+          />
           <SelectField name="categoryId" label="Department">
             <option value="">All departments</option>
             {categories.data?.map((category) => (
@@ -132,10 +288,32 @@ export function ProductListPage() {
           </Button>
         </Form>
       </Formik>
+      {vendorId && (
+        <div className="filter-chip-row">
+          <span>Vendor filter active: {vendorId.slice(0, 8)}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setParams((current) => {
+                current.delete('vendorId');
+                current.set('page', '1');
+                return current;
+              })
+            }
+          >
+            Clear vendor
+          </Button>
+        </div>
+      )}
 
-      {products.isLoading && <div className="route-state">Loading products...</div>}
+      {products.isLoading && (
+        <div className="route-state">Loading products...</div>
+      )}
       {products.error && (
-        <div className="form-error">{getErrorMessage(products.error, 'Could not load products')}</div>
+        <div className="form-error">
+          {getErrorMessage(products.error, 'Could not load products')}
+        </div>
       )}
       {products.data?.data.length === 0 && (
         <div className="empty-panel">
@@ -144,7 +322,9 @@ export function ProductListPage() {
         </div>
       )}
       <div className="commerce-grid">
-        {products.data?.data.map((product) => <ProductTile key={product.id} product={product} />)}
+        {products.data?.data.map((product) => (
+          <ProductTile key={product.id} product={product} />
+        ))}
       </div>
       {meta && meta.totalPages > 1 && (
         <div className="pagination">
@@ -186,11 +366,31 @@ export function ProductListPage() {
 export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { status, user } = useAuth();
   const { addProduct } = useCart();
+  const [showFullReviews, setShowFullReviews] = useState(false);
   const product = useQuery({
     queryKey: ['product', id],
     queryFn: () => catalogApi.product(id ?? ''),
     enabled: Boolean(id),
+  });
+  const paginatedReviews = useInfiniteQuery({
+    queryKey: ['reviews', 'product', id],
+    queryFn: ({ pageParam }) => reviewsApi.product(id ?? '', pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.page < lastPage.meta.totalPages
+        ? lastPage.meta.page + 1
+        : undefined,
+    enabled: Boolean(id) && showFullReviews,
+  });
+  const eligibility = useQuery({
+    queryKey: ['reviews', 'eligibility', id],
+    queryFn: () => reviewsApi.eligibility(id ?? ''),
+    enabled:
+      Boolean(id) && status === 'authenticated' && user?.role === 'CUSTOMER',
+    retry: false,
   });
 
   if (product.isLoading) {
@@ -206,7 +406,9 @@ export function ProductDetailPage() {
       <main className="page-shell">
         <div className="empty-panel">
           <h1>Product not found.</h1>
-          <p>{getErrorMessage(product.error, 'This product is unavailable.')}</p>
+          <p>
+            {getErrorMessage(product.error, 'This product is unavailable.')}
+          </p>
         </div>
       </main>
     );
@@ -214,6 +416,7 @@ export function ProductDetailPage() {
 
   const item = product.data;
   const stock = item.inventory?.quantity;
+  const fullReviews = paginatedReviews.data?.pages.flatMap((page) => page.data);
 
   const add = () => {
     addProduct(item);
@@ -247,17 +450,94 @@ export function ProductDetailPage() {
         </Button>
         <div className="review-boundary">
           <h2>Reviews</h2>
-          {item.reviews?.length ? (
-            item.reviews.map((review) => (
-              <article key={review.id}>
-                <strong>{review.rating}/5</strong>
-                <p>{review.comment ?? 'No written comment.'}</p>
-              </article>
-            ))
+          {(fullReviews?.length ? fullReviews : item.reviews)?.length ? (
+            (fullReviews?.length ? fullReviews : item.reviews)?.map(
+              (review) => (
+                <article key={review.id}>
+                  <strong>
+                    {review.rating}/5
+                    {review.user &&
+                      ` · ${review.user.firstName} ${review.user.lastName}`}
+                  </strong>
+                  <p>{review.comment ?? 'No written comment.'}</p>
+                </article>
+              ),
+            )
           ) : (
             <p>No reviews yet.</p>
           )}
-          <p>Review submission will be available when the backend publishes review routes.</p>
+          <div className="review-actions">
+            {showFullReviews && paginatedReviews.hasNextPage ? (
+              <Button
+                variant="outline"
+                size="sm"
+                isLoading={paginatedReviews.isFetching}
+                onClick={() => paginatedReviews.fetchNextPage()}
+              >
+                Load more reviews
+              </Button>
+            ) : !showFullReviews ? (
+              item._count?.reviews ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  isLoading={paginatedReviews.isFetching}
+                  onClick={() => setShowFullReviews(true)}
+                >
+                  Load full reviews
+                </Button>
+              ) : null
+            ) : null}
+          </div>
+          {status !== 'authenticated' && (
+            <p>
+              <Link
+                to="/login"
+                state={{ from: { pathname: `/products/${item.id}` } }}
+              >
+                Sign in
+              </Link>{' '}
+              after a delivered order to review this product.
+            </p>
+          )}
+          {status === 'authenticated' && user?.role === 'CUSTOMER' && (
+            <div className="review-submit-panel">
+              <h3>Write a review</h3>
+              {eligibility.isLoading && <p>Checking review eligibility...</p>}
+              {eligibility.error && (
+                <p>
+                  {getErrorMessage(
+                    eligibility.error,
+                    'Could not check review eligibility',
+                  )}
+                </p>
+              )}
+              {eligibility.data?.eligible ? (
+                <ReviewForm
+                  productId={item.id}
+                  onCreated={() => {
+                    queryClient.invalidateQueries({
+                      queryKey: ['product', item.id],
+                    });
+                    queryClient.invalidateQueries({
+                      queryKey: ['reviews', 'product', item.id],
+                    });
+                    queryClient.invalidateQueries({
+                      queryKey: ['reviews', 'eligibility', item.id],
+                    });
+                    setShowFullReviews(false);
+                  }}
+                />
+              ) : (
+                eligibility.data && (
+                  <p>
+                    {eligibility.data.reason ??
+                      'Reviews are available after a delivered order and before you have reviewed this product.'}
+                  </p>
+                )
+              )}
+            </div>
+          )}
         </div>
       </section>
     </main>
@@ -269,7 +549,9 @@ export function CartPage() {
   const { status } = useAuth();
   const { items, setQuantity, removeItem, subtotal } = useCart();
   const cartError =
-    location.state && typeof location.state === 'object' && 'cartError' in location.state
+    location.state &&
+    typeof location.state === 'object' &&
+    'cartError' in location.state
       ? String((location.state as { cartError: string }).cartError)
       : '';
 
@@ -297,7 +579,9 @@ export function CartPage() {
                 <div>
                   <h2>{item.name}</h2>
                   <p>{formatMoney(item.price)}</p>
-                  {item.stock === 0 && <span className="inline-warning">Out of stock</span>}
+                  {item.stock === 0 && (
+                    <span className="inline-warning">Out of stock</span>
+                  )}
                 </div>
                 <Input
                   aria-label={`Quantity for ${item.name}`}
@@ -305,9 +589,15 @@ export function CartPage() {
                   min="1"
                   max={item.stock}
                   value={item.quantity}
-                  onChange={(event) => setQuantity(item.productId, Number(event.target.value))}
+                  onChange={(event) =>
+                    setQuantity(item.productId, Number(event.target.value))
+                  }
                 />
-                <Button variant="outline" size="sm" onClick={() => removeItem(item.productId)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => removeItem(item.productId)}
+                >
                   Remove
                 </Button>
               </article>
@@ -316,7 +606,9 @@ export function CartPage() {
           <aside className="summary-panel">
             <p>Estimated subtotal</p>
             <strong>{formatMoney(subtotal)}</strong>
-            <p>Server pricing and stock are checked when the order is created.</p>
+            <p>
+              Server pricing and stock are checked when the order is created.
+            </p>
             {status === 'authenticated' ? (
               <Button asChild size="lg">
                 <Link to="/checkout">Checkout</Link>
@@ -349,8 +641,13 @@ export function CheckoutPage() {
   const { items, clearCart } = useCart();
   const orderMutation = useMutation({ mutationFn: ordersApi.create });
   const paymentMutation = useMutation({
-    mutationFn: ({ orderId, method }: { orderId: string; method: PaymentMethod }) =>
-      paymentsApi.initialize(orderId, method),
+    mutationFn: ({
+      orderId,
+      method,
+    }: {
+      orderId: string;
+      method: PaymentMethod;
+    }) => paymentsApi.initialize(orderId, method),
   });
 
   return (
@@ -373,11 +670,20 @@ export function CheckoutPage() {
           try {
             const { method, ...shippingAddress } = checkoutSchema.cast(values);
             const order = await orderMutation.mutateAsync({
-              items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+              items: items.map((item) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+              })),
               shippingAddress,
             });
-            const payment = await paymentMutation.mutateAsync({ orderId: order.id, method });
-            sessionStorage.setItem('pending_payment_reference', payment.reference);
+            const payment = await paymentMutation.mutateAsync({
+              orderId: order.id,
+              method,
+            });
+            sessionStorage.setItem(
+              'pending_payment_reference',
+              payment.reference,
+            );
             sessionStorage.setItem('pending_order_id', order.id);
             clearCart();
             window.location.assign(payment.authorizationUrl);
@@ -399,11 +705,27 @@ export function CheckoutPage() {
         {({ isSubmitting, status: formStatus }) => (
           <Form className="checkout-form" noValidate>
             <FormError>{formStatus}</FormError>
-            <TextField name="street" label="Street" autoComplete="street-address" />
+            <TextField
+              name="street"
+              label="Street"
+              autoComplete="street-address"
+            />
             <TextField name="city" label="City" autoComplete="address-level2" />
-            <TextField name="state" label="State" autoComplete="address-level1" />
-            <TextField name="country" label="Country" autoComplete="country-name" />
-            <TextField name="zipCode" label="Zip code" autoComplete="postal-code" />
+            <TextField
+              name="state"
+              label="State"
+              autoComplete="address-level1"
+            />
+            <TextField
+              name="country"
+              label="Country"
+              autoComplete="country-name"
+            />
+            <TextField
+              name="zipCode"
+              label="Zip code"
+              autoComplete="postal-code"
+            />
             <SelectField name="method" label="Payment method">
               <option value="CARD">Card</option>
               <option value="BANK_TRANSFER">Bank transfer</option>
@@ -412,7 +734,11 @@ export function CheckoutPage() {
             <Button
               type="submit"
               size="lg"
-              isLoading={isSubmitting || orderMutation.isPending || paymentMutation.isPending}
+              isLoading={
+                isSubmitting ||
+                orderMutation.isPending ||
+                paymentMutation.isPending
+              }
             >
               Continue to payment
             </Button>
@@ -425,8 +751,12 @@ export function CheckoutPage() {
 
 export function PaymentCallbackPage() {
   const [params] = useSearchParams();
-  const reference = params.get('reference') ?? sessionStorage.getItem('pending_payment_reference') ?? '';
-  const orderId = params.get('orderId') ?? sessionStorage.getItem('pending_order_id') ?? '';
+  const reference =
+    params.get('reference') ??
+    sessionStorage.getItem('pending_payment_reference') ??
+    '';
+  const orderId =
+    params.get('orderId') ?? sessionStorage.getItem('pending_order_id') ?? '';
   const verification = useQuery({
     queryKey: ['payment', 'verify', reference],
     queryFn: () => paymentsApi.verify(reference),
@@ -453,7 +783,9 @@ export function PaymentCallbackPage() {
               : 'Payment verified.'}
         </h1>
         {verification.error && (
-          <p>{getErrorMessage(verification.error, 'Could not verify payment')}</p>
+          <p>
+            {getErrorMessage(verification.error, 'Could not verify payment')}
+          </p>
         )}
         {verification.data && (
           <p>
@@ -471,7 +803,10 @@ export function PaymentCallbackPage() {
 
 export function OrdersPage() {
   const queryClient = useQueryClient();
-  const orders = useQuery({ queryKey: ['orders', 'mine'], queryFn: ordersApi.mine });
+  const orders = useQuery({
+    queryKey: ['orders', 'mine'],
+    queryFn: ordersApi.mine,
+  });
   const cancelMutation = useMutation({
     mutationFn: ordersApi.cancel,
     onSuccess: () => {
@@ -488,7 +823,9 @@ export function OrdersPage() {
       />
       {orders.isLoading && <div className="route-state">Loading orders...</div>}
       {orders.error && (
-        <div className="form-error">{getErrorMessage(orders.error, 'Could not load orders')}</div>
+        <div className="form-error">
+          {getErrorMessage(orders.error, 'Could not load orders')}
+        </div>
       )}
       <div className="table-list">
         {orders.data?.map((order) => (
@@ -543,7 +880,7 @@ export function ProfilePage() {
     <main className="page-shell">
       <PageIntro
         title="Profile"
-        body="Keep your account details current. Logout is local because the backend has no logout endpoint."
+        body="Keep your account details current. Logging out revokes the active backend session and clears this tab."
       />
       <Formik<ProfileValues>
         enableReinitialize
@@ -569,8 +906,16 @@ export function ProfilePage() {
           <Form className="settings-form" noValidate>
             <FormError>{formStatus}</FormError>
             <div className="two-col">
-              <TextField name="firstName" label="First name" autoComplete="given-name" />
-              <TextField name="lastName" label="Last name" autoComplete="family-name" />
+              <TextField
+                name="firstName"
+                label="First name"
+                autoComplete="given-name"
+              />
+              <TextField
+                name="lastName"
+                label="Last name"
+                autoComplete="family-name"
+              />
             </div>
             <PasswordField
               name="password"
@@ -578,14 +923,18 @@ export function ProfilePage() {
               placeholder="Leave blank to keep current password"
               autoComplete="new-password"
             />
-            <Button type="submit" size="lg" isLoading={isSubmitting || mutation.isPending}>
+            <Button
+              type="submit"
+              size="lg"
+              isLoading={isSubmitting || mutation.isPending}
+            >
               Save profile
             </Button>
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                logout();
+              onClick={async () => {
+                await logout();
                 navigate('/');
               }}
             >

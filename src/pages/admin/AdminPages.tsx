@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { Form, Formik } from 'formik';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { catalogApi, ordersApi, usersApi, vendorApi } from '../../api';
+import { adminApi, catalogApi, ordersApi, usersApi, vendorApi } from '../../api';
 import { FormError, TextField, TextareaField } from '../../components/forms/FormFields';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
@@ -304,16 +305,102 @@ export function AdminOrdersPage() {
 }
 
 export function AdminAnalyticsPage() {
+  const [limit, setLimit] = useState(5);
+  const analytics = useQuery({
+    queryKey: ['admin', 'analytics', limit],
+    queryFn: () => adminApi.analytics(limit),
+  });
+
   return (
     <section>
-      <AdminIntro title="Analytics" body="This route is reserved for the planned analytics backend." />
-      <div className="empty-panel">
-        <h2>Analytics are unavailable.</h2>
-        <p>
-          No analytics module, route, response shape, or query contract exists yet, so this page
-          makes no speculative API request.
-        </p>
+      <AdminIntro
+        title="Analytics"
+        body="Real marketplace analytics from successful payments, orders, vendors, and product reviews."
+      />
+      <div className="analytics-toolbar">
+        <label htmlFor="analytics-limit">Rows</label>
+        <Select
+          id="analytics-limit"
+          value={String(limit)}
+          onChange={(event) => setLimit(Number(event.target.value))}
+        >
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </Select>
       </div>
+      {analytics.isLoading && <div className="route-state">Loading analytics...</div>}
+      {analytics.error && (
+        <div className="form-error">
+          {getErrorMessage(analytics.error, 'Could not load analytics')}
+        </div>
+      )}
+      {analytics.data && (
+        <>
+          <div className="metric-grid">
+            <article>
+              <span>Total revenue</span>
+              <strong>{formatMoney(analytics.data.totalRevenue)}</strong>
+            </article>
+            {Object.entries(analytics.data.ordersByStatus).map(([status, count]) => (
+              <article key={status}>
+                <span>{status}</span>
+                <strong>{count}</strong>
+              </article>
+            ))}
+          </div>
+          <div className="analytics-grid">
+            <section>
+              <h2>Top-selling products</h2>
+              <div className="table-list">
+                {analytics.data.topSellingProducts.map((product) => (
+                  <article key={product.productId}>
+                    <div>
+                      <strong>{product.name}</strong>
+                      <span>{product.vendor.storeName}</span>
+                    </div>
+                    <div>{product.unitsSold} sold</div>
+                    <div>{formatMoney(product.revenue)}</div>
+                    <div>{product.orderCount} orders</div>
+                  </article>
+                ))}
+              </div>
+              {analytics.data.topSellingProducts.length === 0 && (
+                <div className="empty-panel">
+                  <h2>No product sales yet.</h2>
+                  <p>Paid product performance will appear after successful orders.</p>
+                </div>
+              )}
+            </section>
+            <section>
+              <h2>Vendor performance</h2>
+              <div className="table-list">
+                {analytics.data.vendorPerformance.map((vendor) => (
+                  <article key={vendor.vendorId}>
+                    <div>
+                      <strong>{vendor.storeName}</strong>
+                      <span>{vendor.productCount} products</span>
+                    </div>
+                    <div>{vendor.unitsSold} sold</div>
+                    <div>{formatMoney(vendor.revenue)}</div>
+                    <div>
+                      {vendor.averageRating === null
+                        ? 'No rating'
+                        : `${vendor.averageRating.toFixed(1)} avg`}
+                    </div>
+                  </article>
+                ))}
+              </div>
+              {analytics.data.vendorPerformance.length === 0 && (
+                <div className="empty-panel">
+                  <h2>No vendor performance yet.</h2>
+                  <p>Vendor rankings will appear once paid orders exist.</p>
+                </div>
+              )}
+            </section>
+          </div>
+        </>
+      )}
     </section>
   );
 }

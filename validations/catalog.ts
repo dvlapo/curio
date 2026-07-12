@@ -5,6 +5,7 @@ export const productFilterSchema = yup
   .object({
     search: optionalText,
     categoryId: optionalText,
+    vendorId: optionalText,
     minPrice: optionalNumber('Minimum price', 0),
     maxPrice: optionalNumber('Maximum price', 0),
   })
@@ -21,6 +22,7 @@ export const productFilterSchema = yup
 export type ProductFilterValues = {
   search: string;
   categoryId: string;
+  vendorId: string;
   minPrice: string;
   maxPrice: string;
 };
