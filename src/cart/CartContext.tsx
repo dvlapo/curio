@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import type { PropsWithChildren } from 'react';
 import type { Money, Product, ProductView } from '../types';
 
@@ -34,12 +41,14 @@ function readCart() {
   }
 }
 
-function normalizeProduct(product: Product | ProductView): Omit<CartItem, 'quantity'> {
+function normalizeProduct(
+  product: Product | ProductView,
+): Omit<CartItem, 'quantity'> {
   const isApiProduct = 'images' in product;
   return {
     productId: product.id,
     name: product.name,
-    image: isApiProduct ? product.images?.[0] ?? '' : product.image,
+    image: isApiProduct ? (product.images?.[0] ?? '') : product.image,
     price: product.price,
     stock: isApiProduct ? product.inventory?.quantity : product.stock,
   };
@@ -52,45 +61,72 @@ export function CartProvider({ children }: PropsWithChildren) {
     localStorage.setItem(CART_KEY, JSON.stringify(items));
   }, [items]);
 
-  const addProduct = useCallback((product: Product | ProductView, quantity = 1) => {
-    const next = normalizeProduct(product);
-    setItems((current) => {
-      const existing = current.find((item) => item.productId === next.productId);
-      if (!existing) {
-        return [...current, { ...next, quantity: Math.max(1, quantity) }];
-      }
-      return current.map((item) => {
-        if (item.productId !== next.productId) return item;
-        const requested = item.quantity + quantity;
-        const max = item.stock ?? next.stock;
-        return { ...item, ...next, quantity: max === undefined ? requested : Math.min(max, requested) };
+  const addProduct = useCallback(
+    (product: Product | ProductView, quantity = 1) => {
+      const next = normalizeProduct(product);
+      setItems((current) => {
+        const existing = current.find(
+          (item) => item.productId === next.productId,
+        );
+        if (!existing) {
+          return [...current, { ...next, quantity: Math.max(1, quantity) }];
+        }
+        return current.map((item) => {
+          if (item.productId !== next.productId) return item;
+          const requested = item.quantity + quantity;
+          const max = item.stock ?? next.stock;
+          return {
+            ...item,
+            ...next,
+            quantity: max === undefined ? requested : Math.min(max, requested),
+          };
+        });
       });
-    });
-  }, []);
+    },
+    [],
+  );
 
   const setQuantity = useCallback((productId: string, quantity: number) => {
-    setItems((current) => current.flatMap((item) => {
-      if (item.productId !== productId) return [item];
-      if (quantity <= 0) return [];
-      return [{ ...item, quantity: item.stock === undefined ? quantity : Math.min(item.stock, quantity) }];
-    }));
+    setItems((current) =>
+      current.flatMap((item) => {
+        if (item.productId !== productId) return [item];
+        if (quantity <= 0) return [];
+        return [
+          {
+            ...item,
+            quantity:
+              item.stock === undefined
+                ? quantity
+                : Math.min(item.stock, quantity),
+          },
+        ];
+      }),
+    );
   }, []);
 
   const removeItem = useCallback((productId: string) => {
-    setItems((current) => current.filter((item) => item.productId !== productId));
+    setItems((current) =>
+      current.filter((item) => item.productId !== productId),
+    );
   }, []);
 
   const clearCart = useCallback(() => setItems([]), []);
 
-  const value = useMemo<CartContextValue>(() => ({
-    items,
-    count: items.reduce((total, item) => total + item.quantity, 0),
-    subtotal: items.reduce((total, item) => total + Number(item.price) * item.quantity, 0),
-    addProduct,
-    setQuantity,
-    removeItem,
-    clearCart,
-  }), [addProduct, clearCart, items, removeItem, setQuantity]);
+  const value = useMemo<CartContextValue>(
+    () => ({
+      items,
+      count: items.reduce((total, item) => total + item.quantity, 0),
+      subtotal: items.reduce(
+        (total, item) => total + Number(item.price) * item.quantity,
+        0,
+      ),
+      addProduct,
+      setQuantity,
+      removeItem,
+      clearCart,
+    }),
+    [addProduct, clearCart, items, removeItem, setQuantity],
+  );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

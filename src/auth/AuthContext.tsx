@@ -7,9 +7,16 @@ import {
   useState,
 } from 'react';
 import type { PropsWithChildren } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { authApi, tokenStore } from '../api';
+import { tokenStore } from '../api';
+import {
+  useAuthQueryActions,
+  useCurrentUserQuery,
+  useLoginMutation,
+  useLogoutMutation,
+  useRegisterMutation,
+  useUpdateProfileMutation,
+} from '../hooks/queries';
 import type { AuthUser, Role } from '../types';
 
 type AuthStatus = 'loading' | 'anonymous' | 'authenticated';
@@ -37,46 +44,39 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const queryClient = useQueryClient();
   const [hasSession, setHasSession] = useState(() => tokenStore.hasSession());
-
-  const meQuery = useQuery({
-    queryKey: ['auth', 'me'],
-    queryFn: authApi.me,
-    enabled: hasSession,
-    retry: false,
-  });
+  const meQuery = useCurrentUserQuery(hasSession);
+  const { clearQueryCache, fetchCurrentUser } = useAuthQueryActions();
+  const { mutateAsync: loginWithPassword } = useLoginMutation();
+  const { mutateAsync: registerAccount } = useRegisterMutation();
+  const { mutateAsync: logoutSession } = useLogoutMutation();
+  const { mutateAsync: updateProfileMutation } = useUpdateProfileMutation();
 
   const logout = useCallback(async () => {
-    await authApi.logout().catch(() => undefined);
-    tokenStore.clear();
+    await logoutSession();
     setHasSession(false);
-    queryClient.clear();
-  }, [queryClient]);
+  }, [logoutSession]);
 
   useEffect(() => {
     const onUnauthorized = () => {
       if (tokenStore.hasSession()) return;
       setHasSession(false);
-      queryClient.clear();
+      clearQueryCache();
       toast.warning('Your session expired. Please sign in again.');
     };
     window.addEventListener('auth:unauthorized', onUnauthorized);
     return () =>
       window.removeEventListener('auth:unauthorized', onUnauthorized);
-  }, [queryClient]);
+  }, [clearQueryCache]);
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const result = await authApi.login({ email, password });
+      const result = await loginWithPassword({ email, password });
       tokenStore.set(result);
       setHasSession(true);
-      return queryClient.fetchQuery({
-        queryKey: ['auth', 'me'],
-        queryFn: authApi.me,
-      });
+      return fetchCurrentUser();
     },
-    [queryClient],
+    [fetchCurrentUser, loginWithPassword],
   );
 
   const register = useCallback(
@@ -87,15 +87,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       lastName: string;
       role: Exclude<Role, 'ADMIN'>;
     }) => {
-      const result = await authApi.register(input);
+      const result = await registerAccount(input);
       tokenStore.set(result);
       setHasSession(true);
-      return queryClient.fetchQuery({
-        queryKey: ['auth', 'me'],
-        queryFn: authApi.me,
-      });
+      return fetchCurrentUser();
     },
-    [queryClient],
+    [fetchCurrentUser, registerAccount],
   );
 
   const updateProfile = useCallback(
@@ -104,11 +101,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       lastName?: string;
       password?: string;
     }) => {
-      const user = await authApi.updateMe(input);
-      queryClient.setQueryData(['auth', 'me'], user);
-      return user;
+      return updateProfileMutation(input);
     },
-    [queryClient],
+    [updateProfileMutation],
   );
 
   const user = meQuery.data ?? null;

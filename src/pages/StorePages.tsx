@@ -7,14 +7,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router-dom';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { catalogApi, ordersApi, paymentsApi, reviewsApi } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useCart } from '../cart/CartContext';
 import {
@@ -27,9 +20,23 @@ import {
 import { ImageWithFallback } from '../components/ImageWithFallback';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import {
+  useCancelOrderMutation,
+  useCategoriesQuery,
+  useCreateOrderMutation,
+  useCreateReviewMutation,
+  useInitializePaymentMutation,
+  useMyOrdersQuery,
+  usePaymentByOrderQuery,
+  useProductQuery,
+  useProductReviewsQuery,
+  useProductsQuery,
+  useReviewEligibilityQuery,
+  useVerifyPaymentQuery,
+} from '../hooks/queries';
 import { formatMoney } from '../utils/money';
 import { getErrorMessage } from '../utils/errors';
-import type { PaymentMethod, Product } from '../types';
+import type { Product } from '../types';
 import {
   checkoutSchema,
   productFilterSchema,
@@ -40,6 +47,7 @@ import {
   type ProfileValues,
   type ReviewValues,
 } from '../../validations';
+import { format } from 'date-fns';
 
 function PageIntro({ title, body }: { title: string; body?: string }) {
   return (
@@ -149,7 +157,7 @@ function ReviewForm({
   productId: string;
   onCreated: () => void;
 }) {
-  const mutation = useMutation({ mutationFn: reviewsApi.create });
+  const mutation = useCreateReviewMutation(productId);
 
   return (
     <Formik<ReviewValues>
@@ -160,12 +168,10 @@ function ReviewForm({
         try {
           const next = reviewSchema.cast(values);
           await mutation.mutateAsync({
-            productId,
             rating: Number(next.rating),
             ...(next.comment ? { comment: next.comment } : {}),
           });
           resetForm();
-          toast.success('Review submitted');
           onCreated();
         } catch (err) {
           setStatus(getErrorMessage(err, 'Could not submit review'));
@@ -214,25 +220,15 @@ export function ProductListPage() {
   const minPrice = minPriceParam ? Number(minPriceParam) : undefined;
   const maxPrice = maxPriceParam ? Number(maxPriceParam) : undefined;
 
-  const categories = useQuery({
-    queryKey: ['categories'],
-    queryFn: catalogApi.categories,
-  });
-  const products = useQuery({
-    queryKey: [
-      'products',
-      { page, search, categoryId, vendorId, minPrice, maxPrice },
-    ],
-    queryFn: () =>
-      catalogApi.products({
-        page,
-        limit: 12,
-        search,
-        categoryId,
-        vendorId,
-        minPrice,
-        maxPrice,
-      }),
+  const categories = useCategoriesQuery();
+  const products = useProductsQuery({
+    page,
+    limit: 12,
+    search,
+    categoryId,
+    vendorId,
+    minPrice,
+    maxPrice,
   });
 
   const initialFilters = useMemo<ProductFilterValues>(
@@ -366,32 +362,15 @@ export function ProductListPage() {
 export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { status, user } = useAuth();
   const { addProduct } = useCart();
   const [showFullReviews, setShowFullReviews] = useState(false);
-  const product = useQuery({
-    queryKey: ['product', id],
-    queryFn: () => catalogApi.product(id ?? ''),
-    enabled: Boolean(id),
-  });
-  const paginatedReviews = useInfiniteQuery({
-    queryKey: ['reviews', 'product', id],
-    queryFn: ({ pageParam }) => reviewsApi.product(id ?? '', pageParam),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) =>
-      lastPage.meta.page < lastPage.meta.totalPages
-        ? lastPage.meta.page + 1
-        : undefined,
-    enabled: Boolean(id) && showFullReviews,
-  });
-  const eligibility = useQuery({
-    queryKey: ['reviews', 'eligibility', id],
-    queryFn: () => reviewsApi.eligibility(id ?? ''),
-    enabled:
-      Boolean(id) && status === 'authenticated' && user?.role === 'CUSTOMER',
-    retry: false,
-  });
+  const product = useProductQuery(id);
+  const paginatedReviews = useProductReviewsQuery(id, showFullReviews);
+  const eligibility = useReviewEligibilityQuery(
+    id,
+    status === 'authenticated' && user?.role === 'CUSTOMER',
+  );
 
   if (product.isLoading) {
     return (
@@ -516,15 +495,6 @@ export function ProductDetailPage() {
                 <ReviewForm
                   productId={item.id}
                   onCreated={() => {
-                    queryClient.invalidateQueries({
-                      queryKey: ['product', item.id],
-                    });
-                    queryClient.invalidateQueries({
-                      queryKey: ['reviews', 'product', item.id],
-                    });
-                    queryClient.invalidateQueries({
-                      queryKey: ['reviews', 'eligibility', item.id],
-                    });
                     setShowFullReviews(false);
                   }}
                 />
@@ -639,16 +609,8 @@ const checkoutInitialValues: CheckoutValues = {
 export function CheckoutPage() {
   const navigate = useNavigate();
   const { items, clearCart } = useCart();
-  const orderMutation = useMutation({ mutationFn: ordersApi.create });
-  const paymentMutation = useMutation({
-    mutationFn: ({
-      orderId,
-      method,
-    }: {
-      orderId: string;
-      method: PaymentMethod;
-    }) => paymentsApi.initialize(orderId, method),
-  });
+  const orderMutation = useCreateOrderMutation();
+  const paymentMutation = useInitializePaymentMutation();
 
   return (
     <main className="page-shell checkout-page">
@@ -757,19 +719,8 @@ export function PaymentCallbackPage() {
     '';
   const orderId =
     params.get('orderId') ?? sessionStorage.getItem('pending_order_id') ?? '';
-  const verification = useQuery({
-    queryKey: ['payment', 'verify', reference],
-    queryFn: () => paymentsApi.verify(reference),
-    enabled: Boolean(reference),
-    retry: 2,
-  });
-  const payment = useQuery({
-    queryKey: ['payment', 'order', orderId],
-    queryFn: () => paymentsApi.byOrder(orderId),
-    enabled: Boolean(orderId),
-    retry: 2,
-    refetchInterval: verification.data?.status === 'success' ? 2500 : false,
-  });
+  const verification = useVerifyPaymentQuery(reference);
+  const payment = usePaymentByOrderQuery(orderId, verification.data?.status);
 
   return (
     <main className="page-shell">
@@ -802,18 +753,8 @@ export function PaymentCallbackPage() {
 }
 
 export function OrdersPage() {
-  const queryClient = useQueryClient();
-  const orders = useQuery({
-    queryKey: ['orders', 'mine'],
-    queryFn: ordersApi.mine,
-  });
-  const cancelMutation = useMutation({
-    mutationFn: ordersApi.cancel,
-    onSuccess: () => {
-      toast.success('Order cancelled');
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-    },
-  });
+  const orders = useMyOrdersQuery();
+  const cancelMutation = useCancelOrderMutation();
 
   return (
     <main className="page-shell">
@@ -832,7 +773,7 @@ export function OrdersPage() {
           <article key={order.id}>
             <div>
               <strong>{order.id.slice(0, 8)}</strong>
-              <span>{new Date(order.createdAt).toLocaleDateString()}</span>
+              <span>{format(new Date(order.createdAt), 'dd-MM-yyyy')}</span>
             </div>
             <div>{order.status}</div>
             <div>{order.payment?.status ?? 'Payment pending'}</div>
@@ -862,10 +803,6 @@ export function OrdersPage() {
 export function ProfilePage() {
   const { user, updateProfile, logout } = useAuth();
   const navigate = useNavigate();
-  const mutation = useMutation({
-    mutationFn: updateProfile,
-    onSuccess: () => toast.success('Profile updated'),
-  });
 
   const defaults = useMemo<ProfileValues>(
     () => ({
@@ -890,7 +827,7 @@ export function ProfilePage() {
           setStatus(undefined);
           try {
             const next = profileSchema.cast(values);
-            await mutation.mutateAsync({
+            await updateProfile({
               firstName: next.firstName,
               lastName: next.lastName,
               ...(next.password ? { password: next.password } : {}),
@@ -926,7 +863,7 @@ export function ProfilePage() {
             <Button
               type="submit"
               size="lg"
-              isLoading={isSubmitting || mutation.isPending}
+              isLoading={isSubmitting}
             >
               Save profile
             </Button>

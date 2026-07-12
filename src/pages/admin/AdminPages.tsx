@@ -1,9 +1,23 @@
 import { useState } from 'react';
 import { Form, Formik } from 'formik';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { adminApi, catalogApi, ordersApi, usersApi, vendorApi } from '../../api';
-import { FormError, TextField, TextareaField } from '../../components/forms/FormFields';
+import {
+  useAdminAnalyticsQuery,
+  useAdminOrdersQuery,
+  useAdminUsersQuery,
+  useAdminVendorsQuery,
+  useApproveVendorMutation,
+  useCategoriesQuery,
+  useCreateCategoryMutation,
+  useDeleteCategoryMutation,
+  useToggleUserActiveMutation,
+  useUpdateCategoryMutation,
+  useUpdateOrderStatusMutation,
+} from '../../hooks/queries';
+import {
+  FormError,
+  TextField,
+  TextareaField,
+} from '../../components/forms/FormFields';
 import { Button } from '../../components/ui/button';
 import { Select } from '../../components/ui/select';
 import { formatMoney } from '../../utils/money';
@@ -30,16 +44,8 @@ function categoryInitialValues(category?: Category): CategoryValues {
 }
 
 export function AdminUsersPage() {
-  const queryClient = useQueryClient();
-  const users = useQuery({ queryKey: ['admin', 'users'], queryFn: usersApi.list });
-  const toggle = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      active ? usersApi.deactivate(id) : usersApi.activate(id),
-    onSuccess: () => {
-      toast.success('User updated');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-    },
-  });
+  const users = useAdminUsersQuery();
+  const toggle = useToggleUserActiveMutation();
 
   return (
     <section>
@@ -48,7 +54,9 @@ export function AdminUsersPage() {
         body="Activate or deactivate users. Role assignment is not exposed by the current API."
       />
       {users.error && (
-        <div className="form-error">{getErrorMessage(users.error, 'Could not load users')}</div>
+        <div className="form-error">
+          {getErrorMessage(users.error, 'Could not load users')}
+        </div>
       )}
       <div className="table-list">
         {users.data?.map((user) => (
@@ -64,7 +72,9 @@ export function AdminUsersPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => toggle.mutate({ id: user.id, active: user.isActive !== false })}
+              onClick={() =>
+                toggle.mutate({ id: user.id, active: user.isActive !== false })
+              }
             >
               {user.isActive === false ? 'Activate' : 'Deactivate'}
             </Button>
@@ -76,15 +86,8 @@ export function AdminUsersPage() {
 }
 
 export function AdminVendorsPage() {
-  const queryClient = useQueryClient();
-  const vendors = useQuery({ queryKey: ['admin', 'vendors'], queryFn: vendorApi.vendors });
-  const approve = useMutation({
-    mutationFn: vendorApi.approve,
-    onSuccess: () => {
-      toast.success('Vendor approved');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'vendors'] });
-    },
-  });
+  const vendors = useAdminVendorsQuery();
+  const approve = useApproveVendorMutation();
 
   return (
     <section>
@@ -93,7 +96,9 @@ export function AdminVendorsPage() {
         body="Review vendor profiles and approve stores that can start creating products."
       />
       {vendors.error && (
-        <div className="form-error">{getErrorMessage(vendors.error, 'Could not load vendors')}</div>
+        <div className="form-error">
+          {getErrorMessage(vendors.error, 'Could not load vendors')}
+        </div>
       )}
       <div className="table-list">
         {vendors.data?.map((vendor) => (
@@ -105,7 +110,11 @@ export function AdminVendorsPage() {
             <div>{vendor.isApproved ? 'Approved' : 'Pending'}</div>
             <div>{vendor.description ?? 'No description'}</div>
             {!vendor.isApproved && (
-              <Button variant="outline" size="sm" onClick={() => approve.mutate(vendor.id)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => approve.mutate(vendor.id)}
+              >
                 Approve
               </Button>
             )}
@@ -141,7 +150,9 @@ function CategoryForm({
           setStatus(
             getErrorMessage(
               err,
-              mode === 'create' ? 'Could not save category' : 'Could not update category',
+              mode === 'create'
+                ? 'Could not save category'
+                : 'Could not update category',
             ),
           );
         } finally {
@@ -150,7 +161,10 @@ function CategoryForm({
       }}
     >
       {({ isSubmitting, status: formStatus }) => (
-        <Form className={mode === 'create' ? 'settings-form' : 'category-edit-form'} noValidate>
+        <Form
+          className={mode === 'create' ? 'settings-form' : 'category-edit-form'}
+          noValidate
+        >
           <FormError>{formStatus}</FormError>
           <div className={mode === 'create' ? 'two-col' : 'contents'}>
             <TextField name="name" label="Name" />
@@ -177,30 +191,10 @@ function CategoryForm({
 }
 
 export function AdminCategoriesPage() {
-  const queryClient = useQueryClient();
-  const categories = useQuery({ queryKey: ['categories'], queryFn: catalogApi.categories });
-  const create = useMutation({
-    mutationFn: catalogApi.createCategory,
-    onSuccess: () => {
-      toast.success('Category saved');
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-    },
-  });
-  const update = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: UpdateCategoryInput }) =>
-      catalogApi.updateCategory(id, body),
-    onSuccess: () => {
-      toast.success('Category updated');
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-    },
-  });
-  const remove = useMutation({
-    mutationFn: catalogApi.deleteCategory,
-    onSuccess: () => {
-      toast.success('Category deleted');
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-    },
-  });
+  const categories = useCategoriesQuery();
+  const create = useCreateCategoryMutation();
+  const update = useUpdateCategoryMutation();
+  const remove = useDeleteCategoryMutation();
 
   return (
     <section>
@@ -211,10 +205,14 @@ export function AdminCategoriesPage() {
       <CategoryForm
         mode="create"
         isSaving={create.isPending}
-        onSubmit={(values) => create.mutateAsync(values as Required<UpdateCategoryInput>)}
+        onSubmit={(values) =>
+          create.mutateAsync(values as Required<UpdateCategoryInput>)
+        }
       />
       {remove.error && (
-        <div className="form-error">{getErrorMessage(remove.error, 'Could not delete category')}</div>
+        <div className="form-error">
+          {getErrorMessage(remove.error, 'Could not delete category')}
+        </div>
       )}
       <div className="table-list">
         {categories.data?.map((category) => (
@@ -223,14 +221,17 @@ export function AdminCategoriesPage() {
               mode="update"
               category={category}
               isSaving={update.isPending}
-              onSubmit={(values) => update.mutateAsync({ id: category.id, body: values })}
+              onSubmit={(values) =>
+                update.mutateAsync({ id: category.id, body: values })
+              }
             />
             <div>{category._count?.products ?? 0} products</div>
             <Button
               variant="outline"
               size="sm"
               onClick={() =>
-                window.confirm(`Delete ${category.name}?`) && remove.mutate(category.id)
+                window.confirm(`Delete ${category.name}?`) &&
+                remove.mutate(category.id)
               }
             >
               Delete
@@ -252,16 +253,8 @@ const transitions: Record<OrderStatus, OrderStatus[]> = {
 };
 
 export function AdminOrdersPage() {
-  const queryClient = useQueryClient();
-  const orders = useQuery({ queryKey: ['admin', 'orders'], queryFn: ordersApi.all });
-  const update = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) =>
-      ordersApi.updateStatus(id, status),
-    onSuccess: () => {
-      toast.success('Order updated');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
-    },
-  });
+  const orders = useAdminOrdersQuery();
+  const update = useUpdateOrderStatusMutation();
 
   return (
     <section>
@@ -270,7 +263,9 @@ export function AdminOrdersPage() {
         body="Manage valid status transitions from the list. Admin detail requests are intentionally avoided due to a backend limitation."
       />
       {orders.error && (
-        <div className="form-error">{getErrorMessage(orders.error, 'Could not load orders')}</div>
+        <div className="form-error">
+          {getErrorMessage(orders.error, 'Could not load orders')}
+        </div>
       )}
       <div className="table-list">
         {orders.data?.map((order) => (
@@ -285,7 +280,10 @@ export function AdminOrdersPage() {
               value=""
               aria-label={`Update ${order.id}`}
               onChange={(event) =>
-                update.mutate({ id: order.id, status: event.target.value as OrderStatus })
+                update.mutate({
+                  id: order.id,
+                  status: event.target.value as OrderStatus,
+                })
               }
             >
               <option value="" disabled>
@@ -306,10 +304,7 @@ export function AdminOrdersPage() {
 
 export function AdminAnalyticsPage() {
   const [limit, setLimit] = useState(5);
-  const analytics = useQuery({
-    queryKey: ['admin', 'analytics', limit],
-    queryFn: () => adminApi.analytics(limit),
-  });
+  const analytics = useAdminAnalyticsQuery(limit);
 
   return (
     <section>
@@ -329,7 +324,9 @@ export function AdminAnalyticsPage() {
           <option value="20">20</option>
         </Select>
       </div>
-      {analytics.isLoading && <div className="route-state">Loading analytics...</div>}
+      {analytics.isLoading && (
+        <div className="route-state">Loading analytics...</div>
+      )}
       {analytics.error && (
         <div className="form-error">
           {getErrorMessage(analytics.error, 'Could not load analytics')}
@@ -342,12 +339,14 @@ export function AdminAnalyticsPage() {
               <span>Total revenue</span>
               <strong>{formatMoney(analytics.data.totalRevenue)}</strong>
             </article>
-            {Object.entries(analytics.data.ordersByStatus).map(([status, count]) => (
-              <article key={status}>
-                <span>{status}</span>
-                <strong>{count}</strong>
-              </article>
-            ))}
+            {Object.entries(analytics.data.ordersByStatus).map(
+              ([status, count]) => (
+                <article key={status}>
+                  <span>{status}</span>
+                  <strong>{count}</strong>
+                </article>
+              ),
+            )}
           </div>
           <div className="analytics-grid">
             <section>
@@ -368,7 +367,10 @@ export function AdminAnalyticsPage() {
               {analytics.data.topSellingProducts.length === 0 && (
                 <div className="empty-panel">
                   <h2>No product sales yet.</h2>
-                  <p>Paid product performance will appear after successful orders.</p>
+                  <p>
+                    Paid product performance will appear after successful
+                    orders.
+                  </p>
                 </div>
               )}
             </section>

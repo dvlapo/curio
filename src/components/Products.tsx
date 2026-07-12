@@ -176,11 +176,16 @@ export function Products({
                       addProduct(product);
                       toast.success('Added to cart', {
                         description: product.name,
-                        action: { label: 'View cart', onClick: () => navigate('/cart') },
+                        action: {
+                          label: 'View cart',
+                          onClick: () => navigate('/cart'),
+                        },
                       });
                     }}
                   >
-                    <span>{product.stock === 0 ? 'Unavailable' : 'Add to cart'}</span>
+                    <span>
+                      {product.stock === 0 ? 'Unavailable' : 'Add to cart'}
+                    </span>
                     <ShoppingBagIcon aria-hidden="true" />
                   </button>
                   {product.stock === 0 && (

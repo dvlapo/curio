@@ -42,20 +42,24 @@ export function optionalNumber(label: string, minimum = 0) {
 export const commaSeparatedUrls = yup
   .string()
   .trim()
-  .test('comma-separated-urls', 'Use valid URLs separated by commas', (value) => {
-    if (!value) return true;
+  .test(
+    'comma-separated-urls',
+    'Use valid URLs separated by commas',
+    (value) => {
+      if (!value) return true;
 
-    return value
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .every((item) => {
-        try {
-          new URL(item);
-          return true;
-        } catch {
-          return false;
-        }
-      });
-  })
+      return value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .every((item) => {
+          try {
+            new URL(item);
+            return true;
+          } catch {
+            return false;
+          }
+        });
+    },
+  )
   .default('');

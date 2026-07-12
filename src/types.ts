@@ -1,12 +1,7 @@
 export type Role = 'CUSTOMER' | 'VENDOR' | 'ADMIN';
 
 export type OrderStatus =
-  | 'PENDING'
-  | 'CONFIRMED'
-  | 'SHIPPED'
-  | 'DELIVERED'
-  | 'CANCELLED'
-  | 'REFUNDED';
+  'PENDING' | 'CONFIRMED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED';
 
 export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
 export type PaymentMethod = 'CARD' | 'BANK_TRANSFER' | 'WALLET';
@@ -113,7 +108,8 @@ export interface OrderItem {
   quantity: number;
   unitPrice: Money;
   createdAt: string;
-  product?: Partial<Product> & Pick<Product, 'id' | 'name' | 'images' | 'price'>;
+  product?: Partial<Product> &
+    Pick<Product, 'id' | 'name' | 'images' | 'price'>;
 }
 
 export interface Payment {

@@ -10,7 +10,8 @@ export const buttonVariants = cva(
       variant: {
         default: 'bg-ink text-paper hover:opacity-90',
         secondary: 'bg-acid text-[#111311] hover:brightness-95',
-        outline: 'border border-ink/15 bg-transparent text-ink hover:border-ink/45',
+        outline:
+          'border border-ink/15 bg-transparent text-ink hover:border-ink/45',
         ghost: 'bg-transparent text-ink hover:bg-surface',
         destructive: 'bg-red-600 text-white hover:bg-red-700',
       },
@@ -29,7 +30,8 @@ export const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   isLoading?: boolean;

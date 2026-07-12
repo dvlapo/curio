@@ -25,16 +25,22 @@ export const vendorProductSchema = yup.object({
   description: optionalText,
   imageFiles: yup
     .mixed<File[]>()
-    .test('file-count', 'Upload up to 5 images', (files) => !files || files.length <= MAX_PRODUCT_IMAGES)
+    .test(
+      'file-count',
+      'Upload up to 5 images',
+      (files) => !files || files.length <= MAX_PRODUCT_IMAGES,
+    )
     .test(
       'file-size',
       'Each image must be 5MB or smaller',
-      (files) => !files || files.every((file) => file.size <= MAX_PRODUCT_IMAGE_BYTES),
+      (files) =>
+        !files || files.every((file) => file.size <= MAX_PRODUCT_IMAGE_BYTES),
     )
     .test(
       'file-type',
       'Only image files are allowed',
-      (files) => !files || files.every((file) => file.type.startsWith('image/')),
+      (files) =>
+        !files || files.every((file) => file.type.startsWith('image/')),
     )
     .default([]),
 });
@@ -48,7 +54,9 @@ export type VendorProductValues = {
 };
 
 export const inventorySchema = yup.object({
-  quantity: requiredNumber('Quantity', 0).integer('Quantity must be a whole number'),
+  quantity: requiredNumber('Quantity', 0).integer(
+    'Quantity must be a whole number',
+  ),
   lowStockAt: optionalNumber('Low stock threshold', 1).integer(
     'Low stock threshold must be a whole number',
   ),

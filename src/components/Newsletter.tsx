@@ -51,10 +51,16 @@ export function Newsletter() {
                         type="email"
                         placeholder="you@example.com"
                         aria-invalid={Boolean(error)}
-                        aria-describedby={error ? 'newsletter-email-error' : undefined}
+                        aria-describedby={
+                          error ? 'newsletter-email-error' : undefined
+                        }
                         {...field}
                       />
-                      <Button type="submit" size="icon" aria-label="Join newsletter">
+                      <Button
+                        type="submit"
+                        size="icon"
+                        aria-label="Join newsletter"
+                      >
                         <ArrowRightIcon aria-hidden="true" />
                       </Button>
                     </div>
