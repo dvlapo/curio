@@ -7,6 +7,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import { useCart } from '../cart/CartContext';
 
 interface HeaderProps {
@@ -17,7 +18,9 @@ export function Header({ onScroll }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const reduceMotion = useReducedMotion();
   const routerNavigate = useNavigate();
+  const { status, user } = useAuth();
   const { count } = useCart();
+  const canUseCart = status === 'anonymous' || user?.role === 'CUSTOMER';
 
   const navigate = (id: string) => {
     setOpen(false);
@@ -40,14 +43,16 @@ export function Header({ onScroll }: HeaderProps) {
           <button onClick={() => navigate('story')}>Our promise</button>
         </nav>
         <div className="nav-actions">
-          <button
-            className="bag-button pressable"
-            aria-label={`Shopping bag, ${count} ${count === 1 ? 'item' : 'items'}`}
-            onClick={() => routerNavigate('/cart')}
-          >
-            <ShoppingBagIcon aria-hidden="true" />
-            <span>{count}</span>
-          </button>
+          {canUseCart && (
+            <button
+              className="bag-button pressable"
+              aria-label={`Shopping bag, ${count} ${count === 1 ? 'item' : 'items'}`}
+              onClick={() => routerNavigate('/cart')}
+            >
+              <ShoppingBagIcon aria-hidden="true" />
+              <span>{count}</span>
+            </button>
+          )}
           <button
             className="menu-button pressable"
             onClick={() => setOpen(!open)}

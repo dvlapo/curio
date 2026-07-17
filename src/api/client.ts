@@ -144,7 +144,7 @@ export async function api<T>(
       }
     }
 
-    if (apiError.status === 401) {
+    if (apiError.status === 401 && auth) {
       clearAndNotifyUnauthorized();
     }
 

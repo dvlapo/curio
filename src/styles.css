@@ -61,6 +61,13 @@
 }
 
 @layer components {
+  .select-control {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m6 8 4 4 4-4' stroke='%23666a62' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: right 1rem center;
+    background-repeat: no-repeat;
+    background-size: 1.125rem;
+    padding-right: 2.75rem !important;
+  }
   .sr-only {
     @apply absolute -m-px h-px w-px overflow-hidden p-0 whitespace-nowrap;
     clip: rect(0, 0, 0, 0);
@@ -767,6 +774,116 @@
   .category-edit-form input {
     @apply min-h-11 rounded-lg border border-ink/15 bg-surface px-3 text-base text-ink outline-0 focus:border-ink;
   }
+  .admin-form-panel {
+    @apply rounded-2xl bg-paper p-2 shadow-[0_0_0_1px_oklch(0_0_0/0.06),0_1px_2px_-1px_oklch(0_0_0/0.06),0_2px_4px_oklch(0_0_0/0.04)];
+  }
+  .admin-form-panel__heading {
+    @apply flex items-end justify-between gap-8 px-4 pb-5 pt-4 max-[700px]:block;
+  }
+  .admin-form-panel__heading h2 {
+    @apply mb-0 mt-1 font-display text-[28px] font-medium leading-tight;
+  }
+  .admin-form-panel__heading p {
+    @apply m-0 max-w-sm text-sm leading-relaxed text-muted max-[700px]:mt-3;
+  }
+  .admin-eyebrow {
+    @apply text-xs font-bold uppercase tracking-[.12em] text-muted;
+  }
+  .admin-form-panel .settings-form {
+    @apply rounded-xl border-0 bg-surface shadow-[inset_0_0_0_1px_oklch(0_0_0/0.06)];
+  }
+  .admin-table {
+    @apply mt-8 overflow-hidden rounded-xl bg-paper shadow-[0_0_0_1px_oklch(0_0_0/0.06),0_1px_2px_-1px_oklch(0_0_0/0.06),0_2px_4px_oklch(0_0_0/0.04)];
+  }
+  .admin-table__header,
+  .admin-table__row {
+    @apply grid grid-cols-[minmax(0,1.5fr)_minmax(120px,.7fr)_minmax(120px,.9fr)_minmax(150px,auto)] items-center gap-5 px-5;
+  }
+  .admin-table__header {
+    @apply min-h-11 bg-surface text-[11px] font-bold uppercase tracking-[.12em] text-muted;
+  }
+  .admin-table__row {
+    @apply min-h-[76px] border-t border-ink/10 py-4 transition-[background-color] duration-150 hover:bg-surface/70;
+  }
+  .admin-table--categories .admin-table__header,
+  .admin-table--categories .admin-table__row {
+    @apply grid-cols-[minmax(0,1fr)_110px_90px];
+  }
+  .admin-table__identity {
+    @apply min-w-0;
+  }
+  .admin-table__identity strong {
+    @apply block truncate text-sm font-semibold tabular-nums;
+  }
+  .admin-table__identity span {
+    @apply mt-1 block truncate text-sm text-muted;
+  }
+  .admin-table__amount {
+    @apply font-semibold tabular-nums;
+  }
+  .admin-table__description {
+    @apply line-clamp-2 text-sm leading-relaxed text-muted;
+  }
+  .admin-table__complete {
+    @apply text-sm font-medium text-muted;
+  }
+  .admin-table__metric strong {
+    @apply inline text-base tabular-nums;
+  }
+  .admin-table__metric span {
+    @apply ml-1 inline text-xs text-muted;
+  }
+  .admin-table__select {
+    @apply min-h-10 rounded-lg bg-paper px-3 text-sm;
+  }
+  .admin-status,
+  .admin-role {
+    @apply inline-flex min-h-7 items-center rounded-full px-2.5 text-xs font-semibold capitalize;
+  }
+  .admin-role {
+    @apply bg-ink/[.06] text-ink;
+  }
+  .admin-status--active,
+  .admin-status--delivered {
+    @apply bg-emerald-500/10 text-emerald-800;
+  }
+  .admin-status--inactive,
+  .admin-status--cancelled,
+  .admin-status--refunded {
+    @apply bg-red-500/10 text-red-700;
+  }
+  .admin-status--pending {
+    @apply bg-amber-500/15 text-amber-800;
+  }
+  .admin-status--confirmed,
+  .admin-status--shipped {
+    @apply bg-blue-500/10 text-blue-800;
+  }
+  .admin-table__action {
+    @apply justify-self-start transition-[background-color,border-color,color,transform] active:scale-[.96];
+  }
+  .admin-table__action--danger {
+    @apply text-red-700 hover:border-red-500/40 hover:bg-red-500/[.06];
+  }
+  @media (max-width: 900px) {
+    .admin-table__header {
+      @apply hidden;
+    }
+    .admin-table__row,
+    .admin-table--categories .admin-table__row {
+      @apply grid-cols-1 gap-4 px-4 py-5;
+    }
+    .admin-table__row > [data-label] {
+      @apply flex items-center justify-between gap-4 before:text-[11px] before:font-bold before:uppercase before:tracking-[.12em] before:text-muted before:content-[attr(data-label)];
+    }
+    .admin-table__select,
+    .admin-table__action {
+      @apply w-full;
+    }
+    .admin-table--categories .category-edit-form {
+      @apply grid-cols-1;
+    }
+  }
   .inline-form {
     @apply grid grid-cols-[90px_90px_auto] items-end gap-3 max-[700px]:grid-cols-1;
   }
@@ -774,16 +891,55 @@
     @apply bg-surface;
   }
   .analytics-toolbar {
-    @apply mb-8 flex max-w-48 flex-col gap-2;
+    @apply mb-8 flex items-center justify-between gap-8 rounded-xl bg-paper p-5 shadow-[0_0_0_1px_oklch(0_0_0/0.06),0_1px_2px_-1px_oklch(0_0_0/0.06),0_2px_4px_oklch(0_0_0/0.04)] max-[640px]:items-stretch max-[640px]:flex-col;
+  }
+  .analytics-toolbar > div {
+    @apply grid gap-1;
+  }
+  .analytics-toolbar > div strong {
+    @apply font-display text-xl font-medium;
   }
   .analytics-toolbar label {
-    @apply text-xs font-bold uppercase text-muted;
+    @apply flex min-w-48 items-center gap-3 text-xs font-bold uppercase tracking-[.08em] text-muted max-[640px]:justify-between;
+  }
+  .analytics-toolbar select {
+    @apply min-h-11 min-w-28 bg-surface text-sm normal-case tracking-normal;
+  }
+  .analytics-metrics {
+    @apply gap-3;
+  }
+  .analytics-metrics article {
+    @apply rounded-xl border-0 bg-paper shadow-[0_0_0_1px_oklch(0_0_0/0.06),0_1px_2px_-1px_oklch(0_0_0/0.06),0_2px_4px_oklch(0_0_0/0.04)] transition-[box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:shadow-[0_0_0_1px_oklch(0_0_0/0.08),0_2px_4px_-1px_oklch(0_0_0/0.08),0_6px_12px_oklch(0_0_0/0.06)];
   }
   .analytics-grid {
     @apply mt-10 grid grid-cols-2 gap-8 max-[1100px]:grid-cols-1;
   }
   .analytics-grid h2 {
     @apply m-0 font-display text-[30px] font-medium;
+  }
+  .analytics-table {
+    @apply mt-5;
+  }
+  .analytics-table .admin-table__header,
+  .analytics-table .admin-table__row {
+    @apply grid-cols-[minmax(0,1.5fr)_minmax(90px,.7fr)_minmax(110px,.8fr)] gap-4;
+  }
+  .analytics-table__stack {
+    @apply grid gap-1;
+  }
+  .analytics-table__stack strong {
+    @apply text-sm font-semibold tabular-nums;
+  }
+  .analytics-table__stack span {
+    @apply text-xs text-muted;
+  }
+  .admin-empty-state {
+    @apply mt-8;
+  }
+  @media (max-width: 900px) {
+    .analytics-table .admin-table__row {
+      @apply grid-cols-1;
+    }
   }
 
   .curio-toaster [data-sonner-toast] {

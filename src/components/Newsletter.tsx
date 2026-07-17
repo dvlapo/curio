@@ -50,6 +50,7 @@ export function Newsletter() {
                         id="newsletter-email"
                         type="email"
                         placeholder="you@example.com"
+                        className="border-none focus:ring-0 focus:ring-offset-0 bg-transparent"
                         aria-invalid={Boolean(error)}
                         aria-describedby={
                           error ? 'newsletter-email-error' : undefined
@@ -67,7 +68,7 @@ export function Newsletter() {
                     {error && (
                       <p
                         id="newsletter-email-error"
-                        className="m-0 text-sm font-semibold text-red-700"
+                        className="m-0 mt-1 text-sm font-semibold text-red-700"
                         role="alert"
                       >
                         {error}
@@ -77,7 +78,7 @@ export function Newsletter() {
                 );
               }}
             </Field>
-            <p>No clutter. Unsubscribe whenever you like.</p>
+            <p className="mt-2">No clutter. Unsubscribe whenever you like.</p>
           </Form>
         </Formik>
       )}

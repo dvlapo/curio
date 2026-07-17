@@ -106,6 +106,7 @@ export function Products({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search products"
+            className="border-none focus:ring-0 focus:ring-offset-0 bg-transparent"
           />
         </label>
       </div>

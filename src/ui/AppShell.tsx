@@ -12,9 +12,10 @@ function activeClass({ isActive }: { isActive: boolean }) {
 }
 
 export function StoreShell() {
-  const { user, logout } = useAuth();
+  const { status, user, logout } = useAuth();
   const { count } = useCart();
   const navigate = useNavigate();
+  const canUseCart = status === 'anonymous' || user?.role === 'CUSTOMER';
 
   const signOut = async () => {
     await logout();
@@ -63,14 +64,16 @@ export function StoreShell() {
               Sign in
             </Link>
           )}
-          <Link
-            to="/cart"
-            className="cart-link"
-            aria-label={`Cart with ${count} items`}
-          >
-            <ShoppingBagIcon aria-hidden="true" />
-            <span>{count}</span>
-          </Link>
+          {canUseCart && (
+            <Link
+              to="/cart"
+              className="cart-link"
+              aria-label={`Cart with ${count} items`}
+            >
+              <ShoppingBagIcon aria-hidden="true" />
+              <span>{count}</span>
+            </Link>
+          )}
         </div>
       </header>
       <Outlet />
