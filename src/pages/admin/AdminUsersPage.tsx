@@ -14,7 +14,7 @@ export function AdminUsersPage() {
     <section>
       <AdminIntro
         title="Users"
-        body="Activate or deactivate users. Role assignment is not exposed by the current API."
+        body="Activate or deactivate users. Deactivated users will not be able to log in or make purchases."
       />
       {users.error && (
         <div className="form-error">
@@ -32,41 +32,44 @@ export function AdminUsersPage() {
           </div>
           {users.data.map((user) => (
             <article key={user.id} className="admin-table__row">
-            <div className="admin-table__identity">
-              <strong>
-                {user.firstName} {user.lastName}
-              </strong>
-              <span>{user.email}</span>
-            </div>
-            <div data-label="Role">
-              <span className="admin-role">{user.role.toLowerCase()}</span>
-            </div>
-            <div data-label="Status">
-              <span
-                className={`admin-status ${
+              <div className="admin-table__identity">
+                <strong>
+                  {user.firstName} {user.lastName}
+                </strong>
+                <span>{user.email}</span>
+              </div>
+              <div data-label="Role">
+                <span className="admin-role">{user.role.toLowerCase()}</span>
+              </div>
+              <div data-label="Status">
+                <span
+                  className={`admin-status ${
+                    user.isActive === false
+                      ? 'admin-status--inactive'
+                      : 'admin-status--active'
+                  }`}
+                >
+                  {user.isActive === false ? 'Inactive' : 'Active'}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className={
                   user.isActive === false
-                    ? 'admin-status--inactive'
-                    : 'admin-status--active'
-                }`}
+                    ? 'admin-table__action'
+                    : 'admin-table__action admin-table__action--danger'
+                }
+                disabled={toggle.isPending}
+                onClick={() =>
+                  toggle.mutate({
+                    id: user.id,
+                    active: user.isActive !== false,
+                  })
+                }
               >
-                {user.isActive === false ? 'Inactive' : 'Active'}
-              </span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className={
-                user.isActive === false
-                  ? 'admin-table__action'
-                  : 'admin-table__action admin-table__action--danger'
-              }
-              disabled={toggle.isPending}
-              onClick={() =>
-                toggle.mutate({ id: user.id, active: user.isActive !== false })
-              }
-            >
-              {user.isActive === false ? 'Activate' : 'Deactivate'}
-            </Button>
+                {user.isActive === false ? 'Activate' : 'Deactivate'}
+              </Button>
             </article>
           ))}
         </div>

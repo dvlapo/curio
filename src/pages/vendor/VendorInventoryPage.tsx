@@ -1,14 +1,8 @@
 import { useMemo } from 'react';
 import { format } from 'date-fns';
 import { Form, Formik } from 'formik';
-import {
-  inventorySchema,
-  type InventoryValues,
-} from '../../../validations';
-import {
-  FormError,
-  TextField,
-} from '../../components/forms/FormFields';
+import { inventorySchema, type InventoryValues } from '../../../validations';
+import { FormError, TextField } from '../../components/forms/FormFields';
 import { Button } from '../../components/ui/button';
 import {
   useInventoryQuery,
@@ -21,11 +15,9 @@ import { VendorIntro } from './components/VendorIntro';
 
 function InventoryRowForm({
   row,
-  isSaving,
   onSubmit,
 }: {
   row: Inventory;
-  isSaving: boolean;
   onSubmit: (productId: string, values: InventoryValues) => Promise<void>;
 }) {
   const initialValues = useMemo<InventoryValues>(
@@ -53,14 +45,15 @@ function InventoryRowForm({
       }}
     >
       {({ isSubmitting, status: formStatus }) => (
-        <Form className="inline-form" noValidate>
+        <Form className="inline-form items-start" noValidate>
           <TextField name="quantity" label="Qty" type="number" min="0" />
           <TextField name="lowStockAt" label="Low at" type="number" min="1" />
           <Button
             variant="outline"
             size="sm"
             type="submit"
-            isLoading={isSubmitting || isSaving}
+            className="justify-self-end"
+            isLoading={isSubmitting}
           >
             Save
           </Button>
@@ -99,7 +92,6 @@ export function VendorInventoryPage() {
             </div>
             <InventoryRowForm
               row={row}
-              isSaving={mutation.isPending}
               onSubmit={async (productId, values) => {
                 const next = inventorySchema.cast(values);
                 await mutation.mutateAsync({

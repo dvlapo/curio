@@ -13,7 +13,7 @@ export function VendorReviewsPage() {
     <section>
       <VendorIntro
         title="Product reviews"
-        body="Read customer reviews across your products. Review editing and replies are not part of the current API."
+        body="Read customer reviews across your products. You can use this feedback to improve your products and customer experience."
       />
       {reviews.isLoading && (
         <div className="route-state">Loading reviews...</div>
